@@ -1,6 +1,11 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
-import { IsBoolean, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsBoolean, IsEnum, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { SortOrder } from '../../common/enums/sort-order.enum';
+import { PostSortBy } from './post-sort-by.enum';
+
+const trimString = ({ value }: { value: unknown }): unknown =>
+  typeof value === 'string' ? value.trim() : value;
 
 export class PostsQueryDto {
   @ApiPropertyOptional({ example: 1, default: 1 })
@@ -20,6 +25,7 @@ export class PostsQueryDto {
 
   @ApiPropertyOptional({ example: 'nestjs' })
   @IsOptional()
+  @Transform(trimString)
   @IsString()
   search?: string;
 
@@ -32,8 +38,22 @@ export class PostsQueryDto {
 
   @ApiPropertyOptional({ example: 'nestjs' })
   @IsOptional()
+  @Transform(trimString)
   @IsString()
   categorySlug?: string;
+
+  @ApiPropertyOptional({ example: 1 })
+  @IsOptional()
+  @Transform(({ value }) => Number(value))
+  @IsInt()
+  @Min(1)
+  authorId?: number;
+
+  @ApiPropertyOptional({ example: 'backend' })
+  @IsOptional()
+  @Transform(trimString)
+  @IsString()
+  tag?: string;
 
   @ApiPropertyOptional({ example: true })
   @IsOptional()
@@ -44,4 +64,15 @@ export class PostsQueryDto {
   })
   @IsBoolean()
   published?: boolean;
+
+  @ApiPropertyOptional({ enum: PostSortBy, default: PostSortBy.CreatedAt })
+  @IsOptional()
+  @IsEnum(PostSortBy)
+  sortBy?: PostSortBy = PostSortBy.CreatedAt;
+
+  @ApiPropertyOptional({ enum: SortOrder, default: SortOrder.Desc })
+  @IsOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? value.toUpperCase() : value))
+  @IsEnum(SortOrder)
+  sortOrder?: SortOrder = SortOrder.Desc;
 }

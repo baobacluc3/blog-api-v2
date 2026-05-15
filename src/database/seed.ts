@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import * as bcrypt from 'bcrypt';
 import * as dotenv from 'dotenv';
+import { RefreshToken } from '../auth/entities/refresh-token.entity';
 import { DataSource } from 'typeorm';
 import { Category } from '../categories/entities/category.entity';
 import { Comment } from '../comments/entities/comment.entity';
@@ -8,6 +9,9 @@ import { Role } from '../common/enums/role.enum';
 import { slugify } from '../common/utils/slugify';
 import { Post } from '../posts/entities/post.entity';
 import { User } from '../users/entities/user.entity';
+
+const calculateReadingTime = (content: string): number =>
+  Math.max(1, Math.ceil(content.trim().split(/\s+/).filter(Boolean).length / 200));
 
 dotenv.config();
 
@@ -18,7 +22,7 @@ const dataSource = new DataSource({
   username: process.env.DB_USERNAME,
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
-  entities: [User, Post, Category, Comment],
+  entities: [User, Post, Category, Comment, RefreshToken],
   synchronize: process.env.NODE_ENV !== 'production',
 });
 
@@ -64,6 +68,7 @@ async function ensurePost(input: {
   excerpt: string;
   coverImage: string;
   published: boolean;
+  tags: string[];
   author: User;
   category: Category;
 }): Promise<Post> {
@@ -79,6 +84,8 @@ async function ensurePost(input: {
     postsRepository.create({
       ...input,
       slug,
+      publishedAt: input.published ? new Date() : null,
+      readingTimeMinutes: calculateReadingTime(input.content),
     }),
   );
 }
@@ -111,6 +118,7 @@ async function seed(): Promise<void> {
       'This demo post is created by the seed script. It shows pagination, search, filtering, slug URLs, category relations, author ownership, and comments.',
     coverImage: 'https://images.unsplash.com/photo-1499750310107-5fef28a66643',
     published: true,
+    tags: ['nestjs', 'backend', 'portfolio'],
     author,
     category: nestCategory,
   });
@@ -122,6 +130,7 @@ async function seed(): Promise<void> {
       'Authorization is implemented with JWT guards, role decorators, and service-level ownership checks for posts and comments.',
     coverImage: 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3',
     published: true,
+    tags: ['authorization', 'architecture'],
     author: admin,
     category: architectureCategory,
   });

@@ -8,7 +8,7 @@ This project is designed to show more than basic CRUD:
 
 - **Production API structure**: clean modular NestJS architecture with feature modules, DTOs, entities, services, controllers, guards, decorators, and reusable common utilities.
 - **Security fundamentals**: JWT access tokens, refresh token rotation, hashed refresh token storage, logout/revocation, bcrypt password hashing, role-based access control, ownership authorization, security headers with Helmet, and global rate limiting.
-- **Real API behavior**: pagination metadata, post search, category filters, published/draft visibility rules, generated unique slugs, and protected admin routes.
+- **Real API behavior**: pagination metadata, post search, category/author/tag filters, published/draft visibility rules, generated unique slugs, reading-time calculation, view counting, soft deletes, and protected admin routes.
 - **Operational readiness**: `/api/health` database health check, Dockerfile, Docker Compose for PostgreSQL, seed script, GitHub Actions CI, lint/test/build workflow.
 - **Developer experience**: Swagger docs, example cURL requests, environment template, and automated seed data for quick demos.
 
@@ -25,7 +25,8 @@ This project is designed to show more than basic CRUD:
 - Protected post, comment, user, and category mutation routes
 - Author/admin authorization for post updates and deletes
 - Comment author/admin authorization for comment deletes
-- Post pagination, search, category filter, and published filter
+- Post pagination, search, category/author/tag filters, sorting, and published filter
+- Post reading-time calculation, auto excerpts, tags, publish/unpublish workflow, public view counts, and soft deletes
 - Slug generation for posts and categories
 - Swagger API docs at `/api/docs`
 - Health check endpoint at `/api/health`
@@ -344,6 +345,7 @@ curl -X POST http://localhost:3000/api/posts \
     "content": "Long-form article content goes here.",
     "excerpt": "A practical NestJS API guide.",
     "coverImage": "https://example.com/cover.jpg",
+    "tags": ["nestjs", "backend"],
     "published": true,
     "categoryId": 1
   }'
@@ -352,13 +354,30 @@ curl -X POST http://localhost:3000/api/posts \
 ### List posts with pagination, search, and filters
 
 ```bash
-curl "http://localhost:3000/api/posts?page=1&limit=10&search=nestjs&categorySlug=nestjs&published=true"
+curl "http://localhost:3000/api/posts?page=1&limit=10&search=nestjs&categorySlug=nestjs&tag=backend&sortBy=viewCount&sortOrder=DESC&published=true"
 ```
 
 ### Get post by slug
 
 ```bash
 curl http://localhost:3000/api/posts/slug/building-apis-with-nestjs
+```
+
+### List my posts
+
+```bash
+curl "http://localhost:3000/api/posts/me?page=1&limit=10&published=false" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+### Publish and unpublish a post
+
+```bash
+curl -X PATCH http://localhost:3000/api/posts/1/publish \
+  -H "Authorization: Bearer $TOKEN"
+
+curl -X PATCH http://localhost:3000/api/posts/1/unpublish \
+  -H "Authorization: Bearer $TOKEN"
 ```
 
 ### Add comment
@@ -423,6 +442,8 @@ This is useful for GitHub portfolio review because recruiters can see that the p
 ## API design notes
 
 - Public users can only see published posts.
+- Reading time and excerpt are generated from content when a post is created or content is updated.
+- Published posts receive a `publishedAt` timestamp, public reads increment `viewCount`, and deletes are soft deletes through `deletedAt`.
 - Authenticated authors can see their own unpublished posts.
 - Admin users can see all posts.
 - Only authors or admins can update/delete posts.
@@ -451,5 +472,5 @@ Use these bullets in your CV, GitHub README summary, or LinkedIn project descrip
 
 - Built a modular NestJS Blog REST API with JWT authentication, refresh token rotation, RBAC, TypeORM, PostgreSQL, Swagger, and DTO validation.
 - Implemented production-style authorization rules: admin-only management routes, author-only post edits, and comment ownership checks.
-- Added secure logout, hashed refresh token storage, token revocation, search, filtering, pagination metadata, unique slug generation, seed data, health checks, rate limiting, Docker, and CI.
+- Added secure logout, hashed refresh token storage, token revocation, search, filtering, sorting, pagination metadata, unique slug generation, reading-time calculation, view counts, soft deletes, seed data, health checks, rate limiting, Docker, and CI.
 - Designed the project with clean feature modules, reusable guards/decorators, service-level business rules, and documented API examples.
