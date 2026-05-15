@@ -10,9 +10,11 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiCreatedResponse, ApiOkResponse, ApiTags } from '@nestjs/swagger';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { Role } from '../common/enums/role.enum';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { AuthUser } from '../common/interfaces/auth-user.interface';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CommunitiesService } from './communities.service';
 import { CreateCommunityDto } from './dto/create-community.dto';
@@ -27,6 +29,30 @@ export class CommunitiesController {
   @ApiOkResponse({ description: 'List all Reddit-style communities/subreddits.' })
   findAll() {
     return this.communitiesService.findAll();
+  }
+
+  @Get('me/subscriptions')
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard)
+  @ApiOkResponse({ description: 'List communities joined by the authenticated user.' })
+  findMyMemberships(@CurrentUser() user: AuthUser) {
+    return this.communitiesService.findMyMemberships(user);
+  }
+
+  @Post(':id/join')
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard)
+  @ApiOkResponse({ description: 'Join/subscribe to a community and increment member count.' })
+  join(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: AuthUser) {
+    return this.communitiesService.join(id, user);
+  }
+
+  @Delete(':id/leave')
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard)
+  @ApiOkResponse({ description: 'Leave/unsubscribe from a community and decrement member count.' })
+  leave(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: AuthUser) {
+    return this.communitiesService.leave(id, user);
   }
 
   @Get(':id')

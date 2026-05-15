@@ -8,6 +8,7 @@ import {
   getCacheTtlSeconds,
 } from '../cache/redis-cache.constants';
 import { CommunitiesService } from '../communities/communities.service';
+import { CommunityMembership } from '../communities/entities/community-membership.entity';
 import { PaginationMetaDto } from '../common/dto/pagination-meta.dto';
 import { VoteDto } from '../common/dto/vote.dto';
 import { Role } from '../common/enums/role.enum';
@@ -38,8 +39,8 @@ export class PostsService {
     private readonly postsRepository: Repository<Post>,
     @InjectRepository(PostVote)
     private readonly postVotesRepository: Repository<PostVote>,
-    @InjectRepository(User)
-    private readonly usersRepository: Repository<User>,
+    @InjectRepository(CommunityMembership)
+    private readonly communityMembershipsRepository: Repository<CommunityMembership>,
     private readonly communitiesService: CommunitiesService,
     private readonly cacheService: CacheService,
   ) {}
@@ -138,6 +139,36 @@ export class PostsService {
     }
 
     return fetchPosts();
+  }
+
+  async findSubscribedFeed(query: PostsQueryDto, requester: AuthUser): Promise<PaginatedPosts> {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 10;
+    const skip = (page - 1) * limit;
+    const memberships = await this.communityMembershipsRepository.find({
+      where: { user: { id: requester.id } },
+      relations: { community: true },
+    });
+    const communityIds = memberships.map((membership) => membership.community.id);
+
+    if (!communityIds.length) {
+      return {
+        data: [],
+        meta: new PaginationMetaDto(page, limit, 0),
+      };
+    }
+
+    const qb = this.buildPostsQuery({ ...query, published: true }, requester)
+      .andWhere('community.id IN (:...communityIds)', { communityIds })
+      .skip(skip)
+      .take(limit);
+    const [data, total] = await qb.getManyAndCount();
+    await this.applyRequesterVotes(data, requester);
+
+    return {
+      data,
+      meta: new PaginationMetaDto(page, limit, total),
+    };
   }
 
   async findMine(query: PostsQueryDto, requester: AuthUser): Promise<PaginatedPosts> {

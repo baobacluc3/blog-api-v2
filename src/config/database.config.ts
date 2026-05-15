@@ -1,5 +1,6 @@
 import { TypeOrmModuleOptions } from '@nestjs/typeorm';
 import { RefreshToken } from '../auth/entities/refresh-token.entity';
+import { CommunityMembership } from '../communities/entities/community-membership.entity';
 import { Community } from '../communities/entities/community.entity';
 import { CommentVote } from '../comments/entities/comment-vote.entity';
 import { Comment } from '../comments/entities/comment.entity';
@@ -14,7 +15,16 @@ export const databaseConfig = (): TypeOrmModuleOptions => ({
   username: process.env.DB_USERNAME,
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
-  entities: [User, Post, PostVote, Community, Comment, CommentVote, RefreshToken],
+  entities: [
+    User,
+    Post,
+    PostVote,
+    Community,
+    CommunityMembership,
+    Comment,
+    CommentVote,
+    RefreshToken,
+  ],
   synchronize: process.env.NODE_ENV !== 'production',
   logging: process.env.NODE_ENV !== 'production' ? ['error', 'warn'] : ['error'],
 });
