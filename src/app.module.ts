@@ -3,6 +3,8 @@ import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { RedisCacheModule } from './cache/cache.module';
+import { RedisThrottlerStorageService } from './cache/redis-throttler-storage.service';
 import { AuthModule } from './auth/auth.module';
 import { CategoriesModule } from './categories/categories.module';
 import { CommentsModule } from './comments/comments.module';
@@ -17,12 +19,20 @@ import { UsersModule } from './users/users.module';
       isGlobal: true,
       envFilePath: '.env',
     }),
-    ThrottlerModule.forRoot([
-      {
-        ttl: Number(process.env.THROTTLE_TTL) || 60000,
-        limit: Number(process.env.THROTTLE_LIMIT) || 100,
-      },
-    ]),
+    RedisCacheModule,
+    ThrottlerModule.forRootAsync({
+      imports: [RedisCacheModule],
+      inject: [RedisThrottlerStorageService],
+      useFactory: (storage: RedisThrottlerStorageService) => ({
+        storage,
+        throttlers: [
+          {
+            ttl: Number(process.env.THROTTLE_TTL) || 60000,
+            limit: Number(process.env.THROTTLE_LIMIT) || 100,
+          },
+        ],
+      }),
+    }),
     TypeOrmModule.forRootAsync({
       useFactory: databaseConfig,
     }),

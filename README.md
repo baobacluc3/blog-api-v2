@@ -1,6 +1,6 @@
 # Blog REST API
 
-A production-oriented Blog REST API built with **NestJS**, **TypeScript**, **TypeORM**, **PostgreSQL**, **JWT authentication with refresh token rotation**, **bcrypt**, **DTO validation**, **RBAC**, **Swagger**, pagination, search, filtering, slug generation, health checks, seed data, rate limiting, Docker, and CI.
+A production-oriented Blog REST API built with **NestJS**, **TypeScript**, **TypeORM**, **PostgreSQL**, **Redis caching**, **JWT authentication with refresh token rotation**, **bcrypt**, **DTO validation**, **RBAC**, **Swagger**, pagination, search, filtering, slug generation, health checks, seed data, Redis-backed rate limiting, Docker, and CI.
 
 ## Recruiter-ready highlights
 
@@ -9,7 +9,7 @@ This project is designed to show more than basic CRUD:
 - **Production API structure**: clean modular NestJS architecture with feature modules, DTOs, entities, services, controllers, guards, decorators, and reusable common utilities.
 - **Security fundamentals**: JWT access tokens, refresh token rotation, hashed refresh token storage, logout/revocation, bcrypt password hashing, role-based access control, ownership authorization, security headers with Helmet, and global rate limiting.
 - **Real API behavior**: pagination metadata, post search, category/author/tag filters, published/draft visibility rules, generated unique slugs, reading-time calculation, view counting, soft deletes, and protected admin routes.
-- **Operational readiness**: `/api/health` database health check, Dockerfile, Docker Compose for PostgreSQL, seed script, GitHub Actions CI, lint/test/build workflow.
+- **Operational readiness**: `/api/health` database health check, Redis cache/rate-limit support, Dockerfile, Docker Compose for PostgreSQL and Redis, seed script, GitHub Actions CI, lint/test/build workflow.
 - **Developer experience**: Swagger docs, example cURL requests, environment template, and automated seed data for quick demos.
 
 ## Features
@@ -25,6 +25,7 @@ This project is designed to show more than basic CRUD:
 - Protected post, comment, user, and category mutation routes
 - Author/admin authorization for post updates and deletes
 - Comment author/admin authorization for comment deletes
+- Redis-cached public post list, category list, and popular posts
 - Post pagination, search, category/author/tag filters, sorting, and published filter
 - Post reading-time calculation, auto excerpts, tags, publish/unpublish workflow, public view counts, and soft deletes
 - Slug generation for posts and categories
@@ -32,7 +33,7 @@ This project is designed to show more than basic CRUD:
 - Health check endpoint at `/api/health`
 - Global validation pipe with DTO whitelisting
 - Helmet security headers
-- Rate limiting with `@nestjs/throttler`
+- Redis-backed rate limiting with local in-memory fallback when `REDIS_URL` is not configured
 - PostgreSQL Docker Compose setup
 - Production Dockerfile
 - Seed script with demo admin, author, categories, posts, and comment
@@ -62,6 +63,11 @@ src/
     comments.controller.ts
     comments.module.ts
     comments.service.ts
+  cache/
+    cache.module.ts
+    cache.service.ts
+    redis-client.service.ts
+    redis-throttler-storage.service.ts
   common/
     decorators/
     dto/
@@ -98,6 +104,7 @@ src/
 - Node.js 20+
 - npm 10+
 - PostgreSQL 14+
+- Redis 7+, optional for local development and recommended for multi-instance deployments
 - Docker, optional but recommended for local PostgreSQL
 
 ## Environment variables
@@ -128,6 +135,13 @@ JWT_REFRESH_EXPIRES_IN=7d
 THROTTLE_TTL=60000
 THROTTLE_LIMIT=100
 
+REDIS_URL=redis://localhost:6379
+CACHE_KEY_PREFIX=blog-api
+CACHE_PUBLISHED_POSTS_TTL_SECONDS=60
+CACHE_CATEGORIES_TTL_SECONDS=300
+CACHE_POPULAR_POSTS_TTL_SECONDS=120
+REDIS_COMMAND_TIMEOUT_MS=1000
+
 SEED_ADMIN_NAME=Admin User
 SEED_ADMIN_EMAIL=admin@example.com
 SEED_ADMIN_PASSWORD=AdminPassword123!
@@ -143,7 +157,7 @@ Install dependencies:
 npm install
 ```
 
-Start PostgreSQL:
+Start PostgreSQL and Redis:
 
 ```bash
 docker compose up -d
@@ -353,8 +367,18 @@ curl -X POST http://localhost:3000/api/posts \
 
 ### List posts with pagination, search, and filters
 
+Public published-list responses are cached in Redis when `REDIS_URL` is configured.
+
 ```bash
 curl "http://localhost:3000/api/posts?page=1&limit=10&search=nestjs&categorySlug=nestjs&tag=backend&sortBy=viewCount&sortOrder=DESC&published=true"
+```
+
+### List popular posts
+
+Popular posts are published posts sorted by `viewCount`, then `publishedAt`, and are cached separately from the general list cache.
+
+```bash
+curl "http://localhost:3000/api/posts/popular?limit=5"
 ```
 
 ### Get post by slug
@@ -400,7 +424,7 @@ curl -X DELETE http://localhost:3000/api/comments/1 \
 
 ## Docker usage
 
-Start PostgreSQL for local development:
+Start PostgreSQL and Redis for local development:
 
 ```bash
 docker compose up -d
@@ -417,6 +441,29 @@ Run the API container against a reachable PostgreSQL instance:
 ```bash
 docker run --env-file .env -p 3000:3000 blog-rest-api
 ```
+
+
+## Redis cache and rate-limit strategy
+
+Redis is optional in single-instance development, but recommended for production and required when horizontally scaling API instances that must share cache and throttling state. Set `REDIS_URL` to enable Redis; omit it to bypass response caching and use local in-memory throttling.
+
+Cached data:
+
+- **Published post lists**: unauthenticated `GET /api/posts` requests where `published` is omitted or `published=true`. The cache key includes pagination, search, category, author, tag, and sort query values. Default TTL: `CACHE_PUBLISHED_POSTS_TTL_SECONDS=60`.
+- **Category list**: `GET /api/categories`. Default TTL: `CACHE_CATEGORIES_TTL_SECONDS=300`.
+- **Popular posts**: `GET /api/posts/popular?limit=...`. The cache key includes the normalized limit. Default TTL: `CACHE_POPULAR_POSTS_TTL_SECONDS=120`.
+
+Invalidation rules:
+
+- Creating a post as already published, publishing a draft, unpublishing, updating, or soft-deleting a post invalidates public post-list and popular-post caches.
+- Creating, updating, or deleting a category invalidates the category-list cache.
+- Individual post detail reads are intentionally not cached because they increment public `viewCount`. The popular-post cache may lag new views until its short TTL expires or a post mutation invalidates it.
+
+Rate limiting:
+
+- `@nestjs/throttler` uses the custom Redis storage when `REDIS_URL` is present, so multiple API instances share a single throttle counter namespace.
+- Throttle keys use the same `CACHE_KEY_PREFIX` plus a `:throttle:` segment.
+- If Redis is unavailable at runtime, throttling falls back to local in-memory counters and logs a warning; this keeps a single instance usable but is not suitable for strict multi-instance enforcement.
 
 ## CI
 
@@ -444,6 +491,7 @@ This is useful for GitHub portfolio review because recruiters can see that the p
 - Public users can only see published posts.
 - Reading time and excerpt are generated from content when a post is created or content is updated.
 - Published posts receive a `publishedAt` timestamp, public reads increment `viewCount`, and deletes are soft deletes through `deletedAt`.
+- Redis caches public post lists, category lists, and popular posts, with mutation-driven invalidation for public post caches and category-list caches.
 - Authenticated authors can see their own unpublished posts.
 - Admin users can see all posts.
 - Only authors or admins can update/delete posts.
@@ -472,5 +520,5 @@ Use these bullets in your CV, GitHub README summary, or LinkedIn project descrip
 
 - Built a modular NestJS Blog REST API with JWT authentication, refresh token rotation, RBAC, TypeORM, PostgreSQL, Swagger, and DTO validation.
 - Implemented production-style authorization rules: admin-only management routes, author-only post edits, and comment ownership checks.
-- Added secure logout, hashed refresh token storage, token revocation, search, filtering, sorting, pagination metadata, unique slug generation, reading-time calculation, view counts, soft deletes, seed data, health checks, rate limiting, Docker, and CI.
+- Added secure logout, hashed refresh token storage, token revocation, Redis caching, Redis-backed rate limiting, search, filtering, sorting, pagination metadata, unique slug generation, reading-time calculation, view counts, soft deletes, seed data, health checks, Docker, and CI.
 - Designed the project with clean feature modules, reusable guards/decorators, service-level business rules, and documented API examples.

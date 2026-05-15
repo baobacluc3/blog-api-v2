@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  DefaultValuePipe,
   Delete,
   Get,
   Param,
@@ -38,6 +39,12 @@ export class PostsController {
   @ApiOkResponse({ description: 'List posts owned by the authenticated user.' })
   findMine(@Query() query: PostsQueryDto, @CurrentUser() user: AuthUser) {
     return this.postsService.findMine(query, user);
+  }
+
+  @Get('popular')
+  @ApiOkResponse({ description: 'List most viewed published posts.' })
+  findPopular(@Query('limit', new DefaultValuePipe(5), ParseIntPipe) limit: number) {
+    return this.postsService.findPopular(limit);
   }
 
   @Get('slug/:slug')

@@ -1,6 +1,12 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, Repository, SelectQueryBuilder } from 'typeorm';
+import { CacheService } from '../cache/cache.service';
+import {
+  getCacheKeyPrefix,
+  getCachePatterns,
+  getCacheTtlSeconds,
+} from '../cache/redis-cache.constants';
 import { CategoriesService } from '../categories/categories.service';
 import { PaginationMetaDto } from '../common/dto/pagination-meta.dto';
 import { Role } from '../common/enums/role.enum';
@@ -26,6 +32,7 @@ export class PostsService {
     @InjectRepository(Post)
     private readonly postsRepository: Repository<Post>,
     private readonly categoriesService: CategoriesService,
+    private readonly cacheService: CacheService,
   ) {}
 
   async create(createPostDto: CreatePostDto, author: AuthUser): Promise<Post> {
@@ -47,7 +54,11 @@ export class PostsService {
       category,
     });
 
-    return this.postsRepository.save(post);
+    const savedPost = await this.postsRepository.save(post);
+    if (savedPost.published) {
+      await this.invalidatePublicPostCaches();
+    }
+    return savedPost;
   }
 
   async findAll(query: PostsQueryDto, requester?: AuthUser | null): Promise<PaginatedPosts> {
@@ -55,17 +66,56 @@ export class PostsService {
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
 
-    const qb = this.buildPostsQuery(query, requester).skip(skip).take(limit);
-    const [data, total] = await qb.getManyAndCount();
+    const fetchPosts = async () => {
+      const qb = this.buildPostsQuery(query, requester).skip(skip).take(limit);
+      const [data, total] = await qb.getManyAndCount();
 
-    return {
-      data,
-      meta: new PaginationMetaDto(page, limit, total),
+      return {
+        data,
+        meta: new PaginationMetaDto(page, limit, total),
+      };
     };
+
+    if (!requester && query.published !== false) {
+      return this.cacheService.getOrSet(
+        this.cacheService.createKey(`${getCacheKeyPrefix()}:posts:published:list`, {
+          ...query,
+          page,
+          limit,
+        }),
+        getCacheTtlSeconds().publishedPosts,
+        fetchPosts,
+      );
+    }
+
+    return fetchPosts();
   }
 
   async findMine(query: PostsQueryDto, requester: AuthUser): Promise<PaginatedPosts> {
     return this.findAll({ ...query, authorId: requester.id }, requester);
+  }
+
+  async findPopular(limit = 5): Promise<Post[]> {
+    const normalizedLimit = Math.min(Math.max(limit, 1), 20);
+
+    return this.cacheService.getOrSet(
+      this.cacheService.createKey(`${getCacheKeyPrefix()}:posts:popular:list`, {
+        limit: normalizedLimit,
+      }),
+      getCacheTtlSeconds().popularPosts,
+      () =>
+        this.postsRepository
+          .createQueryBuilder('post')
+          .leftJoinAndSelect('post.author', 'author')
+          .leftJoinAndSelect('post.category', 'category')
+          .loadRelationCountAndMap('post.commentCount', 'post.comments')
+          .where('post.published = true')
+          .orderBy('post.viewCount', SortOrder.Desc)
+          .addOrderBy('post.publishedAt', SortOrder.Desc)
+          .addOrderBy('post.id', SortOrder.Desc)
+          .take(normalizedLimit)
+          .getMany(),
+    );
   }
 
   async findOne(id: number, requester?: AuthUser | null): Promise<Post> {
@@ -109,24 +159,38 @@ export class PostsService {
       this.applyPublishState(post, updatePostDto.published);
     }
 
-    return this.postsRepository.save(post);
+    const savedPost = await this.postsRepository.save(post);
+    await this.invalidatePublicPostCaches();
+    return savedPost;
   }
 
   async publish(id: number, requester: AuthUser): Promise<Post> {
     const post = await this.findOwnedPost(id, requester);
     this.applyPublishState(post, true);
-    return this.postsRepository.save(post);
+    const savedPost = await this.postsRepository.save(post);
+    await this.invalidatePublicPostCaches();
+    return savedPost;
   }
 
   async unpublish(id: number, requester: AuthUser): Promise<Post> {
     const post = await this.findOwnedPost(id, requester);
     this.applyPublishState(post, false);
-    return this.postsRepository.save(post);
+    const savedPost = await this.postsRepository.save(post);
+    await this.invalidatePublicPostCaches();
+    return savedPost;
   }
 
   async remove(id: number, requester: AuthUser): Promise<void> {
     const post = await this.findOwnedPost(id, requester);
     await this.postsRepository.softRemove(post);
+    await this.invalidatePublicPostCaches();
+  }
+
+  private async invalidatePublicPostCaches(): Promise<void> {
+    await this.cacheService.invalidatePatterns([
+      getCachePatterns().publishedPosts,
+      getCachePatterns().popularPosts,
+    ]);
   }
 
   private buildPostsQuery(

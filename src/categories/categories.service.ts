@@ -1,6 +1,12 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { CacheService } from '../cache/cache.service';
+import {
+  getCacheKeyPrefix,
+  getCachePatterns,
+  getCacheTtlSeconds,
+} from '../cache/redis-cache.constants';
 import { slugify } from '../common/utils/slugify';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
@@ -11,6 +17,7 @@ export class CategoriesService {
   constructor(
     @InjectRepository(Category)
     private readonly categoriesRepository: Repository<Category>,
+    private readonly cacheService: CacheService,
   ) {}
 
   async create(createCategoryDto: CreateCategoryDto): Promise<Category> {
@@ -21,13 +28,20 @@ export class CategoriesService {
       ...createCategoryDto,
       slug,
     });
-    return this.categoriesRepository.save(category);
+    const savedCategory = await this.categoriesRepository.save(category);
+    await this.invalidateCategoryListCache();
+    return savedCategory;
   }
 
   async findAll(): Promise<Category[]> {
-    return this.categoriesRepository.find({
-      order: { name: 'ASC' },
-    });
+    return this.cacheService.getOrSet(
+      `${getCacheKeyPrefix()}:categories:list`,
+      getCacheTtlSeconds().categories,
+      () =>
+        this.categoriesRepository.find({
+          order: { name: 'ASC' },
+        }),
+    );
   }
 
   async findOne(id: number): Promise<Category> {
@@ -53,7 +67,9 @@ export class CategoriesService {
       category.name = updateCategoryDto.name;
     }
 
-    return this.categoriesRepository.save(category);
+    const savedCategory = await this.categoriesRepository.save(category);
+    await this.invalidateCategoryListCache();
+    return savedCategory;
   }
 
   async remove(id: number): Promise<void> {
@@ -71,6 +87,11 @@ export class CategoriesService {
     }
 
     await this.categoriesRepository.remove(category);
+    await this.invalidateCategoryListCache();
+  }
+
+  private async invalidateCategoryListCache(): Promise<void> {
+    await this.cacheService.invalidatePatterns([getCachePatterns().categories]);
   }
 
   private async assertNameAvailable(name: string, ignoreId?: number): Promise<void> {
