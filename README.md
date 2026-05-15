@@ -27,7 +27,7 @@ This project is designed to show more than basic CRUD:
 - Comment author/admin authorization for comment deletes
 - Redis-cached public feeds, community/subreddit list, and popular posts
 - Reddit-style post pagination, search, community/subreddit, author, tag filters, and new/top/hot sorting
-- Upvote/downvote/clear-vote endpoints for posts and comments with score, upvote count, downvote count, and current `userVote` tracking
+- Upvote/downvote/clear-vote endpoints for posts and comments with score, upvote count, downvote count, current `userVote` tracking, and author `postKarma`/`commentKarma` updates
 - Link-post metadata with URL/domain, flair, NSFW flag, text content, publish/unpublish workflow, public view counts, and soft deletes
 - Slug generation for posts and communities
 - Swagger API docs at `/api/docs`
@@ -210,7 +210,7 @@ curl http://localhost:3000/api/health
 
 Authenticated users create Reddit-style text or link submissions inside a community/subreddit with `POST /api/communities/:communityId/posts` or the Reddit-like `POST /api/r/:communitySlug/posts`. The legacy `POST /api/posts` route still accepts `communityId` for clients that prefer a flat API. Include optional `url`, `flair`, and `nsfw` fields for Reddit-like link posts.
 
-Voting uses Reddit-style, idempotent per-user vote records. Send `1` to upvote, `-1` to downvote, `0` to clear a vote, or call the DELETE vote route:
+Voting uses Reddit-style, idempotent per-user vote records. Send `1` to upvote, `-1` to downvote, `0` to clear a vote, or call the DELETE vote route. Vote score deltas also update the content author's `postKarma` or `commentKarma`:
 
 ```bash
 curl -X POST http://localhost:3000/api/posts/1/vote \
@@ -534,6 +534,7 @@ This is useful for GitHub portfolio review because recruiters can see that the p
 - Reading time and excerpt are generated from content when a post is created or content is updated.
 - Published posts receive a `publishedAt` timestamp, public reads increment `viewCount`, and deletes are soft deletes through `deletedAt`.
 - Redis caches public post lists, community lists, and popular posts, with mutation-driven invalidation for public post caches and community-list caches.
+- Post and comment vote score deltas update the author's `postKarma` and `commentKarma`, respectively.
 - Authenticated authors can see their own unpublished posts.
 - Admin users can see all posts.
 - Only authors or admins can update/delete posts.

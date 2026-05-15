@@ -8,6 +8,7 @@ import { Role } from '../common/enums/role.enum';
 import { SortOrder } from '../common/enums/sort-order.enum';
 import { VoteValue } from '../common/enums/vote-value.enum';
 import { AuthUser } from '../common/interfaces/auth-user.interface';
+import { User } from '../users/entities/user.entity';
 import { PostSortBy } from './dto/post-sort-by.enum';
 import { PostVote } from './entities/post-vote.entity';
 import { Post } from './entities/post.entity';
@@ -48,12 +49,14 @@ describe('PostsService', () => {
   let service: PostsService;
   let postsRepository: MockRepository<Post>;
   let postVotesRepository: MockRepository<PostVote>;
+  let usersRepository: MockRepository<User>;
   let communitiesService: { findById: jest.Mock; findBySlug: jest.Mock };
   let cacheService: { getOrSet: jest.Mock; invalidatePatterns: jest.Mock; createKey: jest.Mock };
 
   beforeEach(async () => {
     postsRepository = createMockRepository<Post>();
     postVotesRepository = createMockRepository<PostVote>();
+    usersRepository = createMockRepository<User>();
     communitiesService = {
       findById: jest.fn().mockResolvedValue(communityEntity),
       findBySlug: jest.fn().mockResolvedValue(communityEntity),
@@ -71,6 +74,7 @@ describe('PostsService', () => {
         PostsService,
         { provide: getRepositoryToken(Post), useValue: postsRepository },
         { provide: getRepositoryToken(PostVote), useValue: postVotesRepository },
+        { provide: getRepositoryToken(User), useValue: usersRepository },
         { provide: CommunitiesService, useValue: communitiesService },
         { provide: CacheService, useValue: cacheService },
       ],
@@ -282,6 +286,11 @@ describe('PostsService', () => {
 
     expect(postVotesRepository.delete).toHaveBeenCalledWith({ id: 99 });
     expect(postsRepository.increment).toHaveBeenCalledWith({ id: 1 }, 'score', -1);
+    expect(usersRepository.increment).toHaveBeenCalledWith(
+      { id: authorEntity.id },
+      'postKarma',
+      -1,
+    );
     expect(postsRepository.increment).toHaveBeenCalledWith({ id: 1 }, 'upvoteCount', -1);
     expect(result).toMatchObject({ score: 0, upvoteCount: 0, downvoteCount: 0, userVote: null });
   });
@@ -301,6 +310,11 @@ describe('PostsService', () => {
     const result = await service.vote(1, { value: VoteValue.Downvote }, user);
 
     expect(postsRepository.increment).toHaveBeenCalledWith({ id: 1 }, 'score', -2);
+    expect(usersRepository.increment).toHaveBeenCalledWith(
+      { id: authorEntity.id },
+      'postKarma',
+      -2,
+    );
     expect(postsRepository.increment).toHaveBeenCalledWith({ id: 1 }, 'upvoteCount', -1);
     expect(postsRepository.increment).toHaveBeenCalledWith({ id: 1 }, 'downvoteCount', 1);
     expect(result).toMatchObject({ score: -1, upvoteCount: 0, downvoteCount: 1, userVote: -1 });

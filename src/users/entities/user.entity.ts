@@ -30,6 +30,12 @@ export class User {
   @Column({ type: 'enum', enum: Role, default: Role.User })
   role: Role;
 
+  @Column({ type: 'int', default: 0 })
+  postKarma: number;
+
+  @Column({ type: 'int', default: 0 })
+  commentKarma: number;
+
   @OneToMany(() => Post, (post) => post.author)
   posts: Post[];
 
