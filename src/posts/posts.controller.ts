@@ -34,6 +34,14 @@ export class PostsController {
     return this.postsService.findAll(query, user);
   }
 
+  @Get('feed/subscribed')
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard)
+  @ApiOkResponse({ description: 'List published posts from communities joined by the user.' })
+  findSubscribedFeed(@Query() query: PostsQueryDto, @CurrentUser() user: AuthUser) {
+    return this.postsService.findSubscribedFeed(query, user);
+  }
+
   @Get('me')
   @ApiBearerAuth('JWT-auth')
   @UseGuards(JwtAuthGuard)

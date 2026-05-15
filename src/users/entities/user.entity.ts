@@ -9,6 +9,7 @@ import {
 } from 'typeorm';
 import { RefreshToken } from '../../auth/entities/refresh-token.entity';
 import { Comment } from '../../comments/entities/comment.entity';
+import { CommunityMembership } from '../../communities/entities/community-membership.entity';
 import { Role } from '../../common/enums/role.enum';
 import { CommunityMember } from '../../communities/entities/community-member.entity';
 import { Post } from '../../posts/entities/post.entity';
@@ -31,6 +32,12 @@ export class User {
   @Column({ type: 'enum', enum: Role, default: Role.User })
   role: Role;
 
+  @Column({ type: 'int', default: 0 })
+  postKarma: number;
+
+  @Column({ type: 'int', default: 0 })
+  commentKarma: number;
+
   @OneToMany(() => Post, (post) => post.author)
   posts: Post[];
 
@@ -39,6 +46,9 @@ export class User {
 
   @OneToMany(() => Comment, (comment) => comment.author)
   comments: Comment[];
+
+  @OneToMany(() => CommunityMembership, (membership) => membership.user)
+  communityMemberships: CommunityMembership[];
 
   @OneToMany(() => RefreshToken, (refreshToken) => refreshToken.user)
   refreshTokens: RefreshToken[];

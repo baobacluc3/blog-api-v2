@@ -4,10 +4,12 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CacheService } from '../cache/cache.service';
 import { CommunitiesService } from '../communities/communities.service';
+import { CommunityMembership } from '../communities/entities/community-membership.entity';
 import { Role } from '../common/enums/role.enum';
 import { SortOrder } from '../common/enums/sort-order.enum';
 import { VoteValue } from '../common/enums/vote-value.enum';
 import { AuthUser } from '../common/interfaces/auth-user.interface';
+import { User } from '../users/entities/user.entity';
 import { PostSortBy } from './dto/post-sort-by.enum';
 import { PostVote } from './entities/post-vote.entity';
 import { Post } from './entities/post.entity';
@@ -58,6 +60,7 @@ describe('PostsService', () => {
   beforeEach(async () => {
     postsRepository = createMockRepository<Post>();
     postVotesRepository = createMockRepository<PostVote>();
+    communityMembershipsRepository = createMockRepository<CommunityMembership>();
     communitiesService = {
       findById: jest.fn().mockResolvedValue(communityEntity),
       findBySlug: jest.fn().mockResolvedValue(communityEntity),
@@ -76,6 +79,10 @@ describe('PostsService', () => {
         PostsService,
         { provide: getRepositoryToken(Post), useValue: postsRepository },
         { provide: getRepositoryToken(PostVote), useValue: postVotesRepository },
+        {
+          provide: getRepositoryToken(CommunityMembership),
+          useValue: communityMembershipsRepository,
+        },
         { provide: CommunitiesService, useValue: communitiesService },
         { provide: CacheService, useValue: cacheService },
       ],
@@ -181,6 +188,38 @@ describe('PostsService', () => {
     expect(qb.andWhere).toHaveBeenCalledWith('community.slug = :communitySlug', {
       communitySlug: 'nestjs',
     });
+  });
+
+  it('builds a personal feed from joined communities only', async () => {
+    const post = { id: 1, title: 'NestJS', author: authorEntity, community: communityEntity };
+    const qb = createQueryBuilderMock();
+    qb.getManyAndCount.mockResolvedValue([[post], 1]);
+    postsRepository.createQueryBuilder!.mockReturnValue(qb);
+    communityMembershipsRepository.find!.mockResolvedValue([
+      { community: communityEntity } as CommunityMembership,
+    ]);
+
+    const result = await service.findSubscribedFeed({ page: 1, limit: 10 }, user);
+
+    expect(communityMembershipsRepository.find).toHaveBeenCalledWith({
+      where: { user: { id: user.id } },
+      relations: { community: true },
+    });
+    expect(qb.andWhere).toHaveBeenCalledWith('post.published = :published', { published: true });
+    expect(qb.andWhere).toHaveBeenCalledWith('community.id IN (:...communityIds)', {
+      communityIds: [communityEntity.id],
+    });
+    expect(result.data).toEqual([post]);
+    expect(result.meta).toMatchObject({ page: 1, limit: 10, total: 1, totalPages: 1 });
+  });
+
+  it('returns an empty personal feed when the user has not joined communities', async () => {
+    communityMembershipsRepository.find!.mockResolvedValue([]);
+
+    const result = await service.findSubscribedFeed({ page: 2, limit: 5 }, user);
+
+    expect(postsRepository.createQueryBuilder).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ data: [], meta: { page: 2, limit: 5, total: 0 } });
   });
 
   it('lists only the authenticated user posts from findMine', async () => {
@@ -315,6 +354,11 @@ describe('PostsService', () => {
 
     expect(postVotesRepository.delete).toHaveBeenCalledWith({ id: 99 });
     expect(postsRepository.increment).toHaveBeenCalledWith({ id: 1 }, 'score', -1);
+    expect(usersRepository.increment).toHaveBeenCalledWith(
+      { id: authorEntity.id },
+      'postKarma',
+      -1,
+    );
     expect(postsRepository.increment).toHaveBeenCalledWith({ id: 1 }, 'upvoteCount', -1);
     expect(result).toMatchObject({ score: 0, upvoteCount: 0, downvoteCount: 0, userVote: null });
   });
@@ -334,6 +378,11 @@ describe('PostsService', () => {
     const result = await service.vote(1, { value: VoteValue.Downvote }, user);
 
     expect(postsRepository.increment).toHaveBeenCalledWith({ id: 1 }, 'score', -2);
+    expect(usersRepository.increment).toHaveBeenCalledWith(
+      { id: authorEntity.id },
+      'postKarma',
+      -2,
+    );
     expect(postsRepository.increment).toHaveBeenCalledWith({ id: 1 }, 'upvoteCount', -1);
     expect(postsRepository.increment).toHaveBeenCalledWith({ id: 1 }, 'downvoteCount', 1);
     expect(result).toMatchObject({ score: -1, upvoteCount: 0, downvoteCount: 1, userVote: -1 });

@@ -7,6 +7,7 @@ import { VoteValue } from '../common/enums/vote-value.enum';
 import { AuthUser } from '../common/interfaces/auth-user.interface';
 import { Post } from '../posts/entities/post.entity';
 import { PostsService } from '../posts/posts.service';
+import { User } from '../users/entities/user.entity';
 import { CommentsService } from './comments.service';
 import { CommentVote } from './entities/comment-vote.entity';
 import { Comment } from './entities/comment.entity';
@@ -37,12 +38,14 @@ describe('CommentsService', () => {
   let service: CommentsService;
   let commentsRepository: MockRepository<Comment>;
   let commentVotesRepository: MockRepository<CommentVote>;
+  let usersRepository: MockRepository<User>;
   let postsRepository: MockRepository<Post>;
   let postsService: { findOne: jest.Mock };
 
   beforeEach(async () => {
     commentsRepository = createMockRepository<Comment>();
     commentVotesRepository = createMockRepository<CommentVote>();
+    usersRepository = createMockRepository<User>();
     postsRepository = createMockRepository<Post>();
     postsService = { findOne: jest.fn() };
 
@@ -51,6 +54,7 @@ describe('CommentsService', () => {
         CommentsService,
         { provide: getRepositoryToken(Comment), useValue: commentsRepository },
         { provide: getRepositoryToken(CommentVote), useValue: commentVotesRepository },
+        { provide: getRepositoryToken(User), useValue: usersRepository },
         { provide: getRepositoryToken(Post), useValue: postsRepository },
         { provide: PostsService, useValue: postsService },
       ],
@@ -215,6 +219,11 @@ describe('CommentsService', () => {
 
     expect(commentVotesRepository.delete).toHaveBeenCalledWith({ id: 88 });
     expect(commentsRepository.increment).toHaveBeenCalledWith({ id: 5 }, 'score', -1);
+    expect(usersRepository.increment).toHaveBeenCalledWith(
+      { id: authorEntity.id },
+      'commentKarma',
+      -1,
+    );
     expect(commentsRepository.increment).toHaveBeenCalledWith({ id: 5 }, 'upvoteCount', -1);
     expect(result).toMatchObject({ score: 0, upvoteCount: 0, downvoteCount: 0, userVote: null });
   });

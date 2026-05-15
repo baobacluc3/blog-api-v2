@@ -8,12 +8,14 @@ import {
   getCacheTtlSeconds,
 } from '../cache/redis-cache.constants';
 import { CommunitiesService } from '../communities/communities.service';
+import { CommunityMembership } from '../communities/entities/community-membership.entity';
 import { PaginationMetaDto } from '../common/dto/pagination-meta.dto';
 import { VoteDto } from '../common/dto/vote.dto';
 import { Role } from '../common/enums/role.enum';
 import { SortOrder } from '../common/enums/sort-order.enum';
 import { VoteValue } from '../common/enums/vote-value.enum';
 import { AuthUser } from '../common/interfaces/auth-user.interface';
+import { User } from '../users/entities/user.entity';
 import { slugify } from '../common/utils/slugify';
 import { CreateCommunityPostDto } from './dto/create-community-post.dto';
 import { CreatePostDto } from './dto/create-post.dto';
@@ -37,6 +39,8 @@ export class PostsService {
     private readonly postsRepository: Repository<Post>,
     @InjectRepository(PostVote)
     private readonly postVotesRepository: Repository<PostVote>,
+    @InjectRepository(CommunityMembership)
+    private readonly communityMembershipsRepository: Repository<CommunityMembership>,
     private readonly communitiesService: CommunitiesService,
     private readonly cacheService: CacheService,
   ) {}
@@ -139,6 +143,36 @@ export class PostsService {
     }
 
     return fetchPosts();
+  }
+
+  async findSubscribedFeed(query: PostsQueryDto, requester: AuthUser): Promise<PaginatedPosts> {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 10;
+    const skip = (page - 1) * limit;
+    const memberships = await this.communityMembershipsRepository.find({
+      where: { user: { id: requester.id } },
+      relations: { community: true },
+    });
+    const communityIds = memberships.map((membership) => membership.community.id);
+
+    if (!communityIds.length) {
+      return {
+        data: [],
+        meta: new PaginationMetaDto(page, limit, 0),
+      };
+    }
+
+    const qb = this.buildPostsQuery({ ...query, published: true }, requester)
+      .andWhere('community.id IN (:...communityIds)', { communityIds })
+      .skip(skip)
+      .take(limit);
+    const [data, total] = await qb.getManyAndCount();
+    await this.applyRequesterVotes(data, requester);
+
+    return {
+      data,
+      meta: new PaginationMetaDto(page, limit, total),
+    };
   }
 
   async findMine(query: PostsQueryDto, requester: AuthUser): Promise<PaginatedPosts> {
@@ -309,7 +343,10 @@ export class PostsService {
       );
     }
 
-    if (delta.score) await this.postsRepository.increment({ id }, 'score', delta.score);
+    if (delta.score) {
+      await this.postsRepository.increment({ id }, 'score', delta.score);
+      await this.usersRepository.increment({ id: post.author.id }, 'postKarma', delta.score);
+    }
     if (delta.upvotes) await this.postsRepository.increment({ id }, 'upvoteCount', delta.upvotes);
     if (delta.downvotes)
       await this.postsRepository.increment({ id }, 'downvoteCount', delta.downvotes);

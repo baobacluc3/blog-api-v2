@@ -12,6 +12,7 @@ import { Role } from '../common/enums/role.enum';
 import { VoteValue } from '../common/enums/vote-value.enum';
 import { AuthUser } from '../common/interfaces/auth-user.interface';
 import { Post } from '../posts/entities/post.entity';
+import { User } from '../users/entities/user.entity';
 import { PostsService } from '../posts/posts.service';
 import { CreateCommentDto } from './dto/create-comment.dto';
 import { GetCommentsQueryDto } from './dto/get-comments-query.dto';
@@ -50,6 +51,8 @@ export class CommentsService {
     private readonly commentsRepository: Repository<Comment>,
     @InjectRepository(CommentVote)
     private readonly commentVotesRepository: Repository<CommentVote>,
+    @InjectRepository(User)
+    private readonly usersRepository: Repository<User>,
     @InjectRepository(Post)
     private readonly postsRepository: Repository<Post>,
     private readonly postsService: PostsService,
@@ -222,7 +225,10 @@ export class CommentsService {
       );
     }
 
-    if (delta.score) await this.commentsRepository.increment({ id }, 'score', delta.score);
+    if (delta.score) {
+      await this.commentsRepository.increment({ id }, 'score', delta.score);
+      await this.usersRepository.increment({ id: comment.author.id }, 'commentKarma', delta.score);
+    }
     if (delta.upvotes)
       await this.commentsRepository.increment({ id }, 'upvoteCount', delta.upvotes);
     if (delta.downvotes) {
