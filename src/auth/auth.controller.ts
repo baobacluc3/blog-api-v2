@@ -19,14 +19,20 @@ export class AuthController {
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
-  @ApiOkResponse({ description: 'Access and refresh tokens returned successfully.', type: AuthResponseDto })
+  @ApiOkResponse({
+    description: 'Access and refresh tokens returned successfully.',
+    type: AuthResponseDto,
+  })
   login(@Body() loginDto: LoginDto) {
     return this.authService.login(loginDto);
   }
 
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
-  @ApiOkResponse({ description: 'Refresh token rotated and new tokens returned.', type: AuthResponseDto })
+  @ApiOkResponse({
+    description: 'Refresh token rotated and new tokens returned.',
+    type: AuthResponseDto,
+  })
   refresh(@Body() refreshTokenDto: RefreshTokenDto) {
     return this.authService.refresh(refreshTokenDto.refreshToken);
   }

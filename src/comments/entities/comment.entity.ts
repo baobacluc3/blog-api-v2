@@ -1,24 +1,50 @@
-import { Column, CreateDateColumn, Entity, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
+import {
+  Column,
+  CreateDateColumn,
+  DeleteDateColumn,
+  Entity,
+  Index,
+  ManyToOne,
+  OneToMany,
+  PrimaryGeneratedColumn,
+  UpdateDateColumn,
+} from 'typeorm';
 import { Post } from '../../posts/entities/post.entity';
 import { User } from '../../users/entities/user.entity';
 
 @Entity('comments')
 export class Comment {
   @PrimaryGeneratedColumn()
-  id: number;
+  id!: number;
 
   @Column({ type: 'text' })
-  content: string;
+  content!: string;
 
+  @Index()
   @ManyToOne(() => Post, (post) => post.comments, { onDelete: 'CASCADE', eager: false })
-  post: Post;
+  post!: Post;
 
+  @Index()
   @ManyToOne(() => User, (user) => user.comments, { onDelete: 'CASCADE', eager: false })
-  author: User;
+  author!: User;
+
+  @Index()
+  @ManyToOne(() => Comment, (comment) => comment.replies, {
+    eager: false,
+    nullable: true,
+    onDelete: 'CASCADE',
+  })
+  parent!: Comment | null;
+
+  @OneToMany(() => Comment, (comment) => comment.parent)
+  replies!: Comment[];
 
   @CreateDateColumn()
-  createdAt: Date;
+  createdAt!: Date;
 
   @UpdateDateColumn()
-  updatedAt: Date;
+  updatedAt!: Date;
+
+  @DeleteDateColumn({ nullable: true })
+  deletedAt!: Date | null;
 }
