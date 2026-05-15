@@ -1,10 +1,10 @@
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: blog_api_postgres
+    container_name: reddit_clone_api_postgres
     restart: unless-stopped
     environment:
-      POSTGRES_DB: blog_api
+      POSTGRES_DB: reddit_clone_api
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
     ports:
@@ -14,7 +14,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: blog_api_redis
+    container_name: reddit_clone_api_redis
     restart: unless-stopped
     ports:
       - "6379:6379"

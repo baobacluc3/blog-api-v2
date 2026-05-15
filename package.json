@@ -1,12 +1,12 @@
 {
-  "name": "blog-rest-api",
+  "name": "reddit-clone-api",
   "version": "1.0.0",
-  "description": "Production-ready Blog REST API built with NestJS, TypeScript, TypeORM, PostgreSQL, JWT, and Swagger.",
+  "description": "Production-ready Reddit clone REST API built with NestJS, TypeScript, TypeORM, PostgreSQL, JWT, voting, and Swagger.",
   "private": true,
   "license": "MIT",
   "scripts": {
     "build": "nest build",
-    "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
+    "format": "prettier --write \"src/**/*.ts\"",
     "start": "nest start",
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
