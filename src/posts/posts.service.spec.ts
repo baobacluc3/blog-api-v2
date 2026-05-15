@@ -2,6 +2,7 @@ import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { CacheService } from '../cache/cache.service';
 import { CategoriesService } from '../categories/categories.service';
 import { Role } from '../common/enums/role.enum';
 import { SortOrder } from '../common/enums/sort-order.enum';
@@ -43,16 +44,25 @@ describe('PostsService', () => {
   let service: PostsService;
   let postsRepository: MockRepository<Post>;
   let categoriesService: { findById: jest.Mock };
+  let cacheService: { getOrSet: jest.Mock; invalidatePatterns: jest.Mock; createKey: jest.Mock };
 
   beforeEach(async () => {
     postsRepository = createMockRepository<Post>();
     categoriesService = { findById: jest.fn().mockResolvedValue(categoryEntity) };
+    cacheService = {
+      getOrSet: jest.fn((key: string, ttl: number, factory: () => Promise<unknown>) => factory()),
+      invalidatePatterns: jest.fn().mockResolvedValue(undefined),
+      createKey: jest.fn(
+        (namespace: string, payload: unknown) => `${namespace}:${JSON.stringify(payload)}`,
+      ),
+    };
 
     const moduleRef = await Test.createTestingModule({
       providers: [
         PostsService,
         { provide: getRepositoryToken(Post), useValue: postsRepository },
         { provide: CategoriesService, useValue: categoriesService },
+        { provide: CacheService, useValue: cacheService },
       ],
     }).compile();
 
