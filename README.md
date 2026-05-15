@@ -1,6 +1,6 @@
-# Blog REST API
+# Reddit Clone REST API
 
-A production-oriented Blog REST API built with **NestJS**, **TypeScript**, **TypeORM**, **PostgreSQL**, **Redis caching**, **JWT authentication with refresh token rotation**, **bcrypt**, **DTO validation**, **RBAC**, **Swagger**, pagination, search, filtering, slug generation, health checks, seed data, Redis-backed rate limiting, Docker, and CI.
+A production-oriented Reddit clone REST API built with **NestJS**, **TypeScript**, **TypeORM**, **PostgreSQL**, **Redis caching**, **JWT authentication with refresh token rotation**, **bcrypt**, **DTO validation**, **RBAC**, **Swagger**, Reddit-style link/text submissions, upvotes/downvotes, hot/top/new sorting, comment threads, pagination, search, filtering, slug generation, health checks, seed data, Redis-backed rate limiting, Docker, and CI.
 
 ## Recruiter-ready highlights
 
@@ -21,13 +21,14 @@ This project is designed to show more than basic CRUD:
 - Logout with refresh token revocation
 - Password hashing with bcrypt
 - `admin` and `user` roles
-- Public read routes for published posts and categories
+- Public read routes for published Reddit-style posts and communities/categories
 - Protected post, comment, user, and category mutation routes
 - Author/admin authorization for post updates and deletes
 - Comment author/admin authorization for comment deletes
-- Redis-cached public post list, category list, and popular posts
-- Post pagination, search, category/author/tag filters, sorting, and published filter
-- Post reading-time calculation, auto excerpts, tags, publish/unpublish workflow, public view counts, and soft deletes
+- Redis-cached public feeds, community/category list, and popular posts
+- Reddit-style post pagination, search, category/community, author, tag filters, and new/top/hot sorting
+- Upvote/downvote endpoints for posts and comments with score, upvote count, and downvote count tracking
+- Link-post metadata with URL/domain, flair, NSFW flag, text content, publish/unpublish workflow, public view counts, and soft deletes
 - Slug generation for posts and categories
 - Swagger API docs at `/api/docs`
 - Health check endpoint at `/api/health`
@@ -204,6 +205,26 @@ Health check:
 ```bash
 curl http://localhost:3000/api/health
 ```
+
+## Reddit-style endpoints
+
+Authenticated users can create text or link submissions with `POST /api/posts`. Include optional `url`, `flair`, and `nsfw` fields for Reddit-like link posts.
+
+Voting uses idempotent per-user vote records:
+
+```bash
+curl -X POST http://localhost:3000/api/posts/1/vote \
+  -H "Authorization: Bearer <access-token>" \
+  -H "Content-Type: application/json" \
+  -d '{"value": 1}'
+
+curl -X POST http://localhost:3000/api/comments/1/vote \
+  -H "Authorization: Bearer <access-token>" \
+  -H "Content-Type: application/json" \
+  -d '{"value": -1}'
+```
+
+Feeds support Reddit-like sorts through `sortBy=createdAt`, `sortBy=score`, or `sortBy=hot`. Comment threads support `sort=newest`, `sort=oldest`, or `sort=top`.
 
 ## Demo accounts after seeding
 

@@ -4,4 +4,6 @@ export enum PostSortBy {
   PublishedAt = 'publishedAt',
   ViewCount = 'viewCount',
   ReadingTime = 'readingTimeMinutes',
+  Score = 'score',
+  Hot = 'hot',
 }

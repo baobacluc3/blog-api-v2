@@ -8,6 +8,7 @@ import { Role } from '../common/enums/role.enum';
 import { SortOrder } from '../common/enums/sort-order.enum';
 import { AuthUser } from '../common/interfaces/auth-user.interface';
 import { PostSortBy } from './dto/post-sort-by.enum';
+import { PostVote } from './entities/post-vote.entity';
 import { Post } from './entities/post.entity';
 import { PostsService } from './posts.service';
 
@@ -43,11 +44,13 @@ const createQueryBuilderMock = () => ({
 describe('PostsService', () => {
   let service: PostsService;
   let postsRepository: MockRepository<Post>;
+  let postVotesRepository: MockRepository<PostVote>;
   let categoriesService: { findById: jest.Mock };
   let cacheService: { getOrSet: jest.Mock; invalidatePatterns: jest.Mock; createKey: jest.Mock };
 
   beforeEach(async () => {
     postsRepository = createMockRepository<Post>();
+    postVotesRepository = createMockRepository<PostVote>();
     categoriesService = { findById: jest.fn().mockResolvedValue(categoryEntity) };
     cacheService = {
       getOrSet: jest.fn((key: string, ttl: number, factory: () => Promise<unknown>) => factory()),
@@ -61,6 +64,7 @@ describe('PostsService', () => {
       providers: [
         PostsService,
         { provide: getRepositoryToken(Post), useValue: postsRepository },
+        { provide: getRepositoryToken(PostVote), useValue: postVotesRepository },
         { provide: CategoriesService, useValue: categoriesService },
         { provide: CacheService, useValue: cacheService },
       ],
