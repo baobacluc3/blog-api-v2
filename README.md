@@ -27,7 +27,7 @@ This project is designed to show more than basic CRUD:
 - Comment author/admin authorization for comment deletes
 - Redis-cached public feeds, community/subreddit list, and popular posts
 - Reddit-style post pagination, search, community/subreddit, author, tag filters, and new/top/hot sorting
-- Upvote/downvote endpoints for posts and comments with score, upvote count, and downvote count tracking
+- Upvote/downvote/clear-vote endpoints for posts and comments with score, upvote count, downvote count, and current `userVote` tracking
 - Link-post metadata with URL/domain, flair, NSFW flag, text content, publish/unpublish workflow, public view counts, and soft deletes
 - Slug generation for posts and communities
 - Swagger API docs at `/api/docs`
@@ -210,7 +210,7 @@ curl http://localhost:3000/api/health
 
 Authenticated users create Reddit-style text or link submissions inside a community/subreddit with `POST /api/communities/:communityId/posts` or the Reddit-like `POST /api/r/:communitySlug/posts`. The legacy `POST /api/posts` route still accepts `communityId` for clients that prefer a flat API. Include optional `url`, `flair`, and `nsfw` fields for Reddit-like link posts.
 
-Voting uses idempotent per-user vote records:
+Voting uses Reddit-style, idempotent per-user vote records. Send `1` to upvote, `-1` to downvote, `0` to clear a vote, or call the DELETE vote route:
 
 ```bash
 curl -X POST http://localhost:3000/api/posts/1/vote \
@@ -222,6 +222,9 @@ curl -X POST http://localhost:3000/api/comments/1/vote \
   -H "Authorization: Bearer <access-token>" \
   -H "Content-Type: application/json" \
   -d '{"value": -1}'
+
+curl -X DELETE http://localhost:3000/api/posts/1/vote \
+  -H "Authorization: Bearer <access-token>"
 ```
 
 Feeds support Reddit-like sorts through `sortBy=createdAt`, `sortBy=score`, or `sortBy=hot`. Comment threads support `sort=newest`, `sort=oldest`, or `sort=top`.
@@ -266,7 +269,9 @@ Protected routes:
 - `POST /api/communities/:communityId/posts` (`/api/subreddits/:communityId/posts` alias)
 - `POST /api/r/:communitySlug/posts`
 - `POST /api/posts/:id/vote`
+- `DELETE /api/posts/:id/vote`
 - `POST /api/comments/:id/vote`
+- `DELETE /api/comments/:id/vote`
 - `PATCH /api/posts/:id`
 - `DELETE /api/posts/:id`
 - `POST /api/posts/:postId/comments`

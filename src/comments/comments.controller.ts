@@ -75,6 +75,14 @@ export class CommentsController {
     return this.commentsService.vote(id, voteDto, user);
   }
 
+  @Delete('comments/:id/vote')
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard)
+  @ApiOkResponse({ description: 'Remove the authenticated user vote from a Reddit-style comment.' })
+  clearVote(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: AuthUser) {
+    return this.commentsService.clearVote(id, user);
+  }
+
   @Patch('comments/:id')
   @ApiBearerAuth('JWT-auth')
   @UseGuards(JwtAuthGuard)

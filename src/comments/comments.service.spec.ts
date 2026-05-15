@@ -3,6 +3,7 @@ import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Role } from '../common/enums/role.enum';
+import { VoteValue } from '../common/enums/vote-value.enum';
 import { AuthUser } from '../common/interfaces/auth-user.interface';
 import { Post } from '../posts/entities/post.entity';
 import { PostsService } from '../posts/posts.service';
@@ -22,10 +23,13 @@ const otherAuthorEntity = { id: 2, name: 'Other', email: 'other@example.com' };
 const createMockRepository = <T extends object>(): MockRepository<T> => ({
   create: jest.fn((entity) => entity),
   findOne: jest.fn(),
+  find: jest.fn().mockResolvedValue([]),
   save: jest.fn((entity) =>
     Promise.resolve({ id: 10, createdAt: new Date(), updatedAt: new Date(), ...entity }),
   ),
   update: jest.fn(() => Promise.resolve({ affected: 1 })),
+  increment: jest.fn(() => Promise.resolve({ affected: 1 })),
+  delete: jest.fn(() => Promise.resolve({ affected: 1 })),
   createQueryBuilder: jest.fn(),
 });
 
@@ -191,6 +195,28 @@ describe('CommentsService', () => {
     await expect(service.update(5, user, { content: 'New' })).rejects.toBeInstanceOf(
       ForbiddenException,
     );
+  });
+
+  it('removes an existing comment vote and returns the requester vote state', async () => {
+    commentsRepository.findOne!.mockResolvedValue({
+      id: 5,
+      content: 'Voted comment',
+      author: authorEntity,
+      post: { id: 1, published: true },
+      score: 1,
+      upvoteCount: 1,
+      downvoteCount: 0,
+      createdAt: new Date('2026-05-15T09:00:00.000Z'),
+      updatedAt: new Date('2026-05-15T09:00:00.000Z'),
+    });
+    commentVotesRepository.findOne!.mockResolvedValue({ id: 88, value: VoteValue.Upvote });
+
+    const result = await service.clearVote(5, user);
+
+    expect(commentVotesRepository.delete).toHaveBeenCalledWith({ id: 88 });
+    expect(commentsRepository.increment).toHaveBeenCalledWith({ id: 5 }, 'score', -1);
+    expect(commentsRepository.increment).toHaveBeenCalledWith({ id: 5 }, 'upvoteCount', -1);
+    expect(result).toMatchObject({ score: 0, upvoteCount: 0, downvoteCount: 0, userVote: null });
   });
 
   it('allows the post author to soft delete a comment', async () => {

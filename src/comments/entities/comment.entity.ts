@@ -58,6 +58,8 @@ export class Comment {
   @UpdateDateColumn()
   updatedAt!: Date;
 
+  userVote?: number | null;
+
   @DeleteDateColumn({ nullable: true })
   deletedAt!: Date | null;
 }

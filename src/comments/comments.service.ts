@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { PaginationMetaDto } from '../common/dto/pagination-meta.dto';
 import { VoteDto } from '../common/dto/vote.dto';
 import { Role } from '../common/enums/role.enum';
@@ -32,6 +32,7 @@ export type CommentResponse = {
   score: number;
   upvoteCount: number;
   downvoteCount: number;
+  userVote: number | null;
   replies?: CommentResponse[];
   createdAt: Date;
   updatedAt: Date;
@@ -80,6 +81,7 @@ export class CommentsService {
       .take(limit);
 
     const [comments, total] = await qb.getManyAndCount();
+    await this.applyRequesterVotes(comments, requester);
 
     return {
       data: comments.map((comment) => this.toCommentResponse(comment, true)),
@@ -167,6 +169,18 @@ export class CommentsService {
   }
 
   async vote(id: number, voteDto: VoteDto, requester: AuthUser): Promise<CommentResponse> {
+    return this.applyVote(id, voteDto.value, requester);
+  }
+
+  async clearVote(id: number, requester: AuthUser): Promise<CommentResponse> {
+    return this.applyVote(id, VoteValue.NoVote, requester);
+  }
+
+  private async applyVote(
+    id: number,
+    value: VoteValue,
+    requester: AuthUser,
+  ): Promise<CommentResponse> {
     const comment = await this.commentsRepository.findOne({
       where: { id },
       relations: { author: true, post: true },
@@ -184,35 +198,41 @@ export class CommentsService {
       where: { comment: { id }, user: { id: requester.id } },
     });
 
-    if (existingVote?.value === voteDto.value) {
+    if (existingVote?.value === value) {
+      comment.userVote = value === VoteValue.NoVote ? null : value;
       return this.toCommentResponse(comment);
     }
 
-    const delta = this.calculateVoteDelta(existingVote?.value, voteDto.value);
+    const delta = this.calculateVoteDelta(existingVote?.value, value);
 
-    if (existingVote) {
-      existingVote.value = voteDto.value;
+    if (value === VoteValue.NoVote) {
+      if (existingVote) {
+        await this.commentVotesRepository.delete({ id: existingVote.id });
+      }
+    } else if (existingVote) {
+      existingVote.value = value;
       await this.commentVotesRepository.save(existingVote);
     } else {
       await this.commentVotesRepository.save(
         this.commentVotesRepository.create({
           comment: { id },
           user: { id: requester.id },
-          value: voteDto.value,
+          value,
         }),
       );
     }
 
-    await this.commentsRepository.increment({ id }, 'score', delta.score);
+    if (delta.score) await this.commentsRepository.increment({ id }, 'score', delta.score);
     if (delta.upvotes)
       await this.commentsRepository.increment({ id }, 'upvoteCount', delta.upvotes);
     if (delta.downvotes) {
       await this.commentsRepository.increment({ id }, 'downvoteCount', delta.downvotes);
     }
 
-    comment.score += delta.score;
-    comment.upvoteCount += delta.upvotes;
-    comment.downvoteCount += delta.downvotes;
+    comment.score = (comment.score ?? 0) + delta.score;
+    comment.upvoteCount = (comment.upvoteCount ?? 0) + delta.upvotes;
+    comment.downvoteCount = (comment.downvoteCount ?? 0) + delta.downvotes;
+    comment.userVote = value === VoteValue.NoVote ? null : value;
     return this.toCommentResponse(comment);
   }
 
@@ -273,6 +293,37 @@ export class CommentsService {
     return this.toCommentResponse(comment);
   }
 
+  private async applyRequesterVotes(
+    comments: Comment[],
+    requester?: AuthUser | null,
+  ): Promise<void> {
+    const allComments = comments.flatMap((comment) => [comment, ...(comment.replies ?? [])]);
+
+    if (!allComments.length) {
+      return;
+    }
+
+    if (!requester) {
+      allComments.forEach((comment) => {
+        comment.userVote = null;
+      });
+      return;
+    }
+
+    const votes = await this.commentVotesRepository.find({
+      where: {
+        comment: { id: In(allComments.map((comment) => comment.id)) },
+        user: { id: requester.id },
+      },
+      relations: { comment: true },
+    });
+    const votesByCommentId = new Map(votes.map((vote) => [vote.comment.id, vote.value]));
+
+    allComments.forEach((comment) => {
+      comment.userVote = votesByCommentId.get(comment.id) ?? null;
+    });
+  }
+
   private calculateVoteDelta(
     oldValue: number | undefined,
     newValue: VoteValue,
@@ -297,6 +348,7 @@ export class CommentsService {
       score: comment.score,
       upvoteCount: comment.upvoteCount,
       downvoteCount: comment.downvoteCount,
+      userVote: comment.userVote ?? null,
       createdAt: comment.createdAt,
       updatedAt: comment.updatedAt,
     };

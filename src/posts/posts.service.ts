@@ -1,6 +1,6 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Brackets, Repository, SelectQueryBuilder } from 'typeorm';
+import { Brackets, In, Repository, SelectQueryBuilder } from 'typeorm';
 import { CacheService } from '../cache/cache.service';
 import {
   getCacheKeyPrefix,
@@ -114,6 +114,7 @@ export class PostsService {
     const fetchPosts = async () => {
       const qb = this.buildPostsQuery(query, requester).skip(skip).take(limit);
       const [data, total] = await qb.getManyAndCount();
+      await this.applyRequesterVotes(data, requester);
 
       return {
         data,
@@ -166,12 +167,14 @@ export class PostsService {
   async findOne(id: number, requester?: AuthUser | null): Promise<Post> {
     const post = await this.findPostForRead({ id }, requester);
     await this.incrementViewCount(post, requester);
+    await this.applyRequesterVote(post, requester);
     return post;
   }
 
   async findBySlug(slug: string, requester?: AuthUser | null): Promise<Post> {
     const post = await this.findPostForRead({ slug }, requester);
     await this.incrementViewCount(post, requester);
+    await this.applyRequesterVote(post, requester);
     return post;
   }
 
@@ -238,6 +241,14 @@ export class PostsService {
   }
 
   async vote(id: number, voteDto: VoteDto, requester: AuthUser): Promise<Post> {
+    return this.applyVote(id, voteDto.value, requester);
+  }
+
+  async clearVote(id: number, requester: AuthUser): Promise<Post> {
+    return this.applyVote(id, VoteValue.NoVote, requester);
+  }
+
+  private async applyVote(id: number, value: VoteValue, requester: AuthUser): Promise<Post> {
     const post = await this.postsRepository.findOne({
       where: { id },
       relations: { author: true, community: true },
@@ -255,34 +266,40 @@ export class PostsService {
       where: { post: { id }, user: { id: requester.id } },
     });
 
-    if (existingVote?.value === voteDto.value) {
+    if (existingVote?.value === value) {
+      post.userVote = value === VoteValue.NoVote ? null : value;
       return post;
     }
 
-    const delta = this.calculateVoteDelta(existingVote?.value, voteDto.value);
+    const delta = this.calculateVoteDelta(existingVote?.value, value);
 
-    if (existingVote) {
-      existingVote.value = voteDto.value;
+    if (value === VoteValue.NoVote) {
+      if (existingVote) {
+        await this.postVotesRepository.delete({ id: existingVote.id });
+      }
+    } else if (existingVote) {
+      existingVote.value = value;
       await this.postVotesRepository.save(existingVote);
     } else {
       await this.postVotesRepository.save(
         this.postVotesRepository.create({
           post: { id },
           user: { id: requester.id },
-          value: voteDto.value,
+          value,
         }),
       );
     }
 
-    await this.postsRepository.increment({ id }, 'score', delta.score);
+    if (delta.score) await this.postsRepository.increment({ id }, 'score', delta.score);
     if (delta.upvotes) await this.postsRepository.increment({ id }, 'upvoteCount', delta.upvotes);
     if (delta.downvotes)
       await this.postsRepository.increment({ id }, 'downvoteCount', delta.downvotes);
     await this.invalidatePublicPostCaches();
 
-    post.score += delta.score;
-    post.upvoteCount += delta.upvotes;
-    post.downvoteCount += delta.downvotes;
+    post.score = (post.score ?? 0) + delta.score;
+    post.upvoteCount = (post.upvoteCount ?? 0) + delta.upvotes;
+    post.downvoteCount = (post.downvoteCount ?? 0) + delta.downvotes;
+    post.userVote = value === VoteValue.NoVote ? null : value;
     return post;
   }
 
@@ -418,6 +435,41 @@ export class PostsService {
     }
 
     qb.andWhere('post.published = true');
+  }
+
+  private async applyRequesterVote(post: Post, requester?: AuthUser | null): Promise<void> {
+    if (!requester) {
+      post.userVote = null;
+      return;
+    }
+
+    const vote = await this.postVotesRepository.findOne({
+      where: { post: { id: post.id }, user: { id: requester.id } },
+    });
+    post.userVote = vote?.value ?? null;
+  }
+
+  private async applyRequesterVotes(posts: Post[], requester?: AuthUser | null): Promise<void> {
+    if (!posts.length) {
+      return;
+    }
+
+    if (!requester) {
+      posts.forEach((post) => {
+        post.userVote = null;
+      });
+      return;
+    }
+
+    const votes = await this.postVotesRepository.find({
+      where: { post: { id: In(posts.map((post) => post.id)) }, user: { id: requester.id } },
+      relations: { post: true },
+    });
+    const votesByPostId = new Map(votes.map((vote) => [vote.post.id, vote.value]));
+
+    posts.forEach((post) => {
+      post.userVote = votesByPostId.get(post.id) ?? null;
+    });
   }
 
   private async findPostForRead(

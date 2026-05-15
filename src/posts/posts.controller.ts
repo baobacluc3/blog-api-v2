@@ -94,6 +94,14 @@ export class PostsController {
     return this.postsService.vote(id, voteDto, user);
   }
 
+  @Delete(':id/vote')
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard)
+  @ApiOkResponse({ description: 'Remove the authenticated user vote from a Reddit-style post.' })
+  clearVote(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: AuthUser) {
+    return this.postsService.clearVote(id, user);
+  }
+
   @Patch(':id/publish')
   @ApiBearerAuth('JWT-auth')
   @UseGuards(JwtAuthGuard)

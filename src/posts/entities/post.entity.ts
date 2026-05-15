@@ -87,6 +87,8 @@ export class Post {
 
   commentCount?: number;
 
+  userVote?: number | null;
+
   @CreateDateColumn()
   createdAt: Date;
 

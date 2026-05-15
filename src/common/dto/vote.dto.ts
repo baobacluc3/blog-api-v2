@@ -7,7 +7,7 @@ export class VoteDto {
   @ApiProperty({
     enum: VoteValue,
     example: VoteValue.Upvote,
-    description: 'Use 1 to upvote or -1 to downvote.',
+    description: 'Use 1 to upvote, -1 to downvote, or 0 to remove the current vote.',
   })
   @Transform(({ value }) => Number(value))
   @IsEnum(VoteValue)

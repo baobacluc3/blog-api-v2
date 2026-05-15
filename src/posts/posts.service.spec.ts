@@ -6,6 +6,7 @@ import { CacheService } from '../cache/cache.service';
 import { CommunitiesService } from '../communities/communities.service';
 import { Role } from '../common/enums/role.enum';
 import { SortOrder } from '../common/enums/sort-order.enum';
+import { VoteValue } from '../common/enums/vote-value.enum';
 import { AuthUser } from '../common/interfaces/auth-user.interface';
 import { PostSortBy } from './dto/post-sort-by.enum';
 import { PostVote } from './entities/post-vote.entity';
@@ -24,9 +25,11 @@ const communityEntity = { id: 5, name: 'NestJS', slug: 'nestjs' };
 const createMockRepository = <T extends object>(): MockRepository<T> => ({
   create: jest.fn((entity) => entity),
   findOne: jest.fn(),
+  find: jest.fn().mockResolvedValue([]),
   save: jest.fn((entity) => Promise.resolve({ id: 10, ...entity })),
   softRemove: jest.fn(() => Promise.resolve()),
   increment: jest.fn(() => Promise.resolve({ affected: 1 })),
+  delete: jest.fn(() => Promise.resolve({ affected: 1 })),
   createQueryBuilder: jest.fn(),
 });
 
@@ -261,6 +264,46 @@ describe('PostsService', () => {
     await expect(service.update(1, { title: 'Updated title' }, otherUser)).rejects.toBeInstanceOf(
       ForbiddenException,
     );
+  });
+
+  it('removes an existing post vote and updates aggregates', async () => {
+    postsRepository.findOne!.mockResolvedValue({
+      id: 1,
+      published: true,
+      score: 1,
+      upvoteCount: 1,
+      downvoteCount: 0,
+      author: authorEntity,
+      community: communityEntity,
+    });
+    postVotesRepository.findOne!.mockResolvedValue({ id: 99, value: VoteValue.Upvote });
+
+    const result = await service.clearVote(1, user);
+
+    expect(postVotesRepository.delete).toHaveBeenCalledWith({ id: 99 });
+    expect(postsRepository.increment).toHaveBeenCalledWith({ id: 1 }, 'score', -1);
+    expect(postsRepository.increment).toHaveBeenCalledWith({ id: 1 }, 'upvoteCount', -1);
+    expect(result).toMatchObject({ score: 0, upvoteCount: 0, downvoteCount: 0, userVote: null });
+  });
+
+  it('switches a post vote from upvote to downvote with Reddit-style deltas', async () => {
+    postsRepository.findOne!.mockResolvedValue({
+      id: 1,
+      published: true,
+      score: 1,
+      upvoteCount: 1,
+      downvoteCount: 0,
+      author: authorEntity,
+      community: communityEntity,
+    });
+    postVotesRepository.findOne!.mockResolvedValue({ id: 99, value: VoteValue.Upvote });
+
+    const result = await service.vote(1, { value: VoteValue.Downvote }, user);
+
+    expect(postsRepository.increment).toHaveBeenCalledWith({ id: 1 }, 'score', -2);
+    expect(postsRepository.increment).toHaveBeenCalledWith({ id: 1 }, 'upvoteCount', -1);
+    expect(postsRepository.increment).toHaveBeenCalledWith({ id: 1 }, 'downvoteCount', 1);
+    expect(result).toMatchObject({ score: -1, upvoteCount: 0, downvoteCount: 1, userVote: -1 });
   });
 
   it('returns not found for missing posts', async () => {
