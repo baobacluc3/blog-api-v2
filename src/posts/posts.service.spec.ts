@@ -50,8 +50,11 @@ describe('PostsService', () => {
   let service: PostsService;
   let postsRepository: MockRepository<Post>;
   let postVotesRepository: MockRepository<PostVote>;
-  let communityMembershipsRepository: MockRepository<CommunityMembership>;
-  let communitiesService: { findById: jest.Mock; findBySlug: jest.Mock };
+  let communitiesService: {
+    findById: jest.Mock;
+    findBySlug: jest.Mock;
+    findJoinedCommunityIds: jest.Mock;
+  };
   let cacheService: { getOrSet: jest.Mock; invalidatePatterns: jest.Mock; createKey: jest.Mock };
 
   beforeEach(async () => {
@@ -61,6 +64,7 @@ describe('PostsService', () => {
     communitiesService = {
       findById: jest.fn().mockResolvedValue(communityEntity),
       findBySlug: jest.fn().mockResolvedValue(communityEntity),
+      findJoinedCommunityIds: jest.fn().mockResolvedValue([5]),
     };
     cacheService = {
       getOrSet: jest.fn((key: string, ttl: number, factory: () => Promise<unknown>) => factory()),
@@ -227,6 +231,34 @@ describe('PostsService', () => {
 
     expect(qb.andWhere).toHaveBeenCalledWith('author.id = :authorIdFilter', {
       authorIdFilter: user.id,
+    });
+  });
+
+  it('lists home feed posts from communities joined by the authenticated user', async () => {
+    const post = { id: 1, title: 'Home feed', author: authorEntity, community: communityEntity };
+    const qb = createQueryBuilderMock();
+    qb.getManyAndCount.mockResolvedValue([[post], 1]);
+    postsRepository.createQueryBuilder!.mockReturnValue(qb);
+
+    const result = await service.findHomeFeed({ page: 1, limit: 10 }, user);
+
+    expect(communitiesService.findJoinedCommunityIds).toHaveBeenCalledWith(user.id);
+    expect(qb.andWhere).toHaveBeenCalledWith('community.id IN (:...communityIds)', {
+      communityIds: [5],
+    });
+    expect(qb.andWhere).toHaveBeenCalledWith('post.published = :published', { published: true });
+    expect(result.data).toEqual([post]);
+  });
+
+  it('returns an empty home feed when the user has not joined communities', async () => {
+    communitiesService.findJoinedCommunityIds.mockResolvedValue([]);
+
+    const result = await service.findHomeFeed({ page: 2, limit: 5 }, user);
+
+    expect(postsRepository.createQueryBuilder).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      data: [],
+      meta: { page: 2, limit: 5, total: 0, totalPages: 0 },
     });
   });
 

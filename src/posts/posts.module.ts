@@ -6,16 +6,13 @@ import { CommunityMembership } from '../communities/entities/community-membershi
 import { PostVote } from './entities/post-vote.entity';
 import { Post } from './entities/post.entity';
 import { CommunityPostsController } from './community-posts.controller';
+import { FeedController } from './feed.controller';
 import { PostsController } from './posts.controller';
 import { PostsService } from './posts.service';
 
 @Module({
-  imports: [
-    TypeOrmModule.forFeature([Post, PostVote, CommunityMembership]),
-    CommunitiesModule,
-    RedisCacheModule,
-  ],
-  controllers: [PostsController, CommunityPostsController],
+  imports: [TypeOrmModule.forFeature([Post, PostVote]), CommunitiesModule, RedisCacheModule],
+  controllers: [PostsController, CommunityPostsController, FeedController],
   providers: [PostsService],
   exports: [PostsService],
 })

@@ -3,7 +3,7 @@ import * as bcrypt from 'bcrypt';
 import * as dotenv from 'dotenv';
 import { RefreshToken } from '../auth/entities/refresh-token.entity';
 import { DataSource } from 'typeorm';
-import { CommunityMembership } from '../communities/entities/community-membership.entity';
+import { CommunityMember } from '../communities/entities/community-member.entity';
 import { Community } from '../communities/entities/community.entity';
 import { CommentVote } from '../comments/entities/comment-vote.entity';
 import { Comment } from '../comments/entities/comment.entity';
@@ -25,16 +25,7 @@ const dataSource = new DataSource({
   username: process.env.DB_USERNAME,
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
-  entities: [
-    User,
-    Post,
-    PostVote,
-    Community,
-    CommunityMembership,
-    Comment,
-    CommentVote,
-    RefreshToken,
-  ],
+  entities: [User, Post, PostVote, Community, CommunityMember, Comment, CommentVote, RefreshToken],
   synchronize: process.env.NODE_ENV !== 'production',
 });
 

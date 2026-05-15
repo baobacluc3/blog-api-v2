@@ -13,6 +13,7 @@ import { ApiBearerAuth, ApiCreatedResponse, ApiOkResponse, ApiTags } from '@nest
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { Role } from '../common/enums/role.enum';
+import { AuthUser } from '../common/interfaces/auth-user.interface';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { AuthUser } from '../common/interfaces/auth-user.interface';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -59,6 +60,22 @@ export class CommunitiesController {
   @ApiOkResponse({ description: 'Get one community/subreddit.' })
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.communitiesService.findOne(id);
+  }
+
+  @Post(':id/join')
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard)
+  @ApiOkResponse({ description: 'Join a community/subreddit and include it in the home feed.' })
+  join(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: AuthUser) {
+    return this.communitiesService.join(id, user);
+  }
+
+  @Delete(':id/join')
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard)
+  @ApiOkResponse({ description: 'Leave a community/subreddit and remove it from the home feed.' })
+  leave(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: AuthUser) {
+    return this.communitiesService.leave(id, user);
   }
 
   @Post()

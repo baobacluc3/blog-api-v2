@@ -11,6 +11,7 @@ import { RefreshToken } from '../../auth/entities/refresh-token.entity';
 import { Comment } from '../../comments/entities/comment.entity';
 import { CommunityMembership } from '../../communities/entities/community-membership.entity';
 import { Role } from '../../common/enums/role.enum';
+import { CommunityMember } from '../../communities/entities/community-member.entity';
 import { Post } from '../../posts/entities/post.entity';
 
 @Entity('users')
@@ -39,6 +40,9 @@ export class User {
 
   @OneToMany(() => Post, (post) => post.author)
   posts: Post[];
+
+  @OneToMany(() => CommunityMember, (membership) => membership.user)
+  communityMemberships: CommunityMember[];
 
   @OneToMany(() => Comment, (comment) => comment.author)
   comments: Comment[];
