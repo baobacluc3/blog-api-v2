@@ -208,7 +208,7 @@ curl http://localhost:3000/api/health
 
 ## Reddit-style endpoints
 
-Authenticated users can create text or link submissions inside communities/subreddits with `POST /api/posts`. Include optional `url`, `flair`, and `nsfw` fields for Reddit-like link posts.
+Authenticated users create Reddit-style text or link submissions inside a community/subreddit with `POST /api/communities/:communityId/posts` or the Reddit-like `POST /api/r/:communitySlug/posts`. The legacy `POST /api/posts` route still accepts `communityId` for clients that prefer a flat API. Include optional `url`, `flair`, and `nsfw` fields for Reddit-like link posts.
 
 Voting uses idempotent per-user vote records:
 
@@ -252,6 +252,8 @@ Public routes:
 - `POST /api/auth/logout`
 - `GET /api/health`
 - `GET /api/posts`
+- `GET /api/communities/:communityId/posts` (`/api/subreddits/:communityId/posts` alias)
+- `GET /api/r/:communitySlug/posts`
 - `GET /api/posts/:id`
 - `GET /api/posts/slug/:slug`
 - `GET /api/communities` (`/api/subreddits` alias)
@@ -261,6 +263,8 @@ Public routes:
 Protected routes:
 
 - `POST /api/posts`
+- `POST /api/communities/:communityId/posts` (`/api/subreddits/:communityId/posts` alias)
+- `POST /api/r/:communitySlug/posts`
 - `POST /api/posts/:id/vote`
 - `POST /api/comments/:id/vote`
 - `PATCH /api/posts/:id`
@@ -374,10 +378,10 @@ curl -X POST http://localhost:3000/api/communities \
   }'
 ```
 
-### Create post
+### Create a post inside a community/subreddit
 
 ```bash
-curl -X POST http://localhost:3000/api/posts \
+curl -X POST http://localhost:3000/api/r/nestjs/posts \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -389,17 +393,21 @@ curl -X POST http://localhost:3000/api/posts \
     "flair": "Discussion",
     "nsfw": false,
     "tags": ["nestjs", "backend"],
-    "published": true,
-    "communityId": 1
+    "published": true
   }'
 ```
+
+You can also create by numeric community id with `POST /api/communities/1/posts` or use the flat compatibility route `POST /api/posts` with `communityId` in the body.
 
 ### List posts with pagination, search, and filters
 
 Public published-list responses are cached in Redis when `REDIS_URL` is configured.
 
 ```bash
-curl "http://localhost:3000/api/posts?page=1&limit=10&search=nestjs&communitySlug=nestjs&tag=backend&sortBy=viewCount&sortOrder=DESC&published=true"
+curl "http://localhost:3000/api/r/nestjs/posts?page=1&limit=10&search=api&tag=backend&sortBy=hot&published=true"
+
+# Global/home feed remains available too:
+curl "http://localhost:3000/api/posts?page=1&limit=10&communitySlug=nestjs&tag=backend&sortBy=hot&published=true"
 ```
 
 ### List popular posts
@@ -478,7 +486,7 @@ Redis is optional in single-instance development, but recommended for production
 
 Cached data:
 
-- **Published post lists**: unauthenticated `GET /api/posts` requests where `published` is omitted or `published=true`. The cache key includes pagination, search, community, author, tag, and sort query values. Default TTL: `CACHE_PUBLISHED_POSTS_TTL_SECONDS=60`.
+- **Published post lists**: unauthenticated home-feed and community-feed requests where `published` is omitted or `published=true`. The cache key includes pagination, search, community, author, tag, and sort query values. Default TTL: `CACHE_PUBLISHED_POSTS_TTL_SECONDS=60`.
 - **Community list**: `GET /api/communities`. Default TTL: `CACHE_COMMUNITIES_TTL_SECONDS=300`.
 - **Popular posts**: `GET /api/posts/popular?limit=...`. The cache key includes the normalized limit. Default TTL: `CACHE_POPULAR_POSTS_TTL_SECONDS=120`.
 

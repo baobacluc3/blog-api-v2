@@ -15,6 +15,7 @@ import { SortOrder } from '../common/enums/sort-order.enum';
 import { VoteValue } from '../common/enums/vote-value.enum';
 import { AuthUser } from '../common/interfaces/auth-user.interface';
 import { slugify } from '../common/utils/slugify';
+import { CreateCommunityPostDto } from './dto/create-community-post.dto';
 import { CreatePostDto } from './dto/create-post.dto';
 import { PostSortBy } from './dto/post-sort-by.enum';
 import { PostsQueryDto } from './dto/posts-query.dto';
@@ -41,7 +42,15 @@ export class PostsService {
   ) {}
 
   async create(createPostDto: CreatePostDto, author: AuthUser): Promise<Post> {
-    const community = await this.communitiesService.findById(createPostDto.communityId);
+    return this.createInCommunityId(createPostDto.communityId, createPostDto, author);
+  }
+
+  async createInCommunityId(
+    communityId: number,
+    createPostDto: CreateCommunityPostDto,
+    author: AuthUser,
+  ): Promise<Post> {
+    const community = await this.communitiesService.findById(communityId);
     const slug = await this.generateUniqueSlug(createPostDto.title);
     const published = createPostDto.published ?? false;
 
@@ -68,6 +77,33 @@ export class PostsService {
       await this.invalidatePublicPostCaches();
     }
     return savedPost;
+  }
+
+  async createInCommunitySlug(
+    communitySlug: string,
+    createPostDto: CreateCommunityPostDto,
+    author: AuthUser,
+  ): Promise<Post> {
+    const community = await this.communitiesService.findBySlug(communitySlug);
+    return this.createInCommunityId(community.id, createPostDto, author);
+  }
+
+  async findAllByCommunityId(
+    communityId: number,
+    query: PostsQueryDto,
+    requester?: AuthUser | null,
+  ): Promise<PaginatedPosts> {
+    await this.communitiesService.findById(communityId);
+    return this.findAll({ ...query, communityId }, requester);
+  }
+
+  async findAllByCommunitySlug(
+    communitySlug: string,
+    query: PostsQueryDto,
+    requester?: AuthUser | null,
+  ): Promise<PaginatedPosts> {
+    const community = await this.communitiesService.findBySlug(communitySlug);
+    return this.findAll({ ...query, communitySlug: community.slug }, requester);
   }
 
   async findAll(query: PostsQueryDto, requester?: AuthUser | null): Promise<PaginatedPosts> {

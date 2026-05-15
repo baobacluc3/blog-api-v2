@@ -64,6 +64,17 @@ export class CommunitiesService {
     return this.findOne(id);
   }
 
+  async findBySlug(slug: string): Promise<Community> {
+    const normalizedSlug = slugify(slug);
+    const community = await this.communitiesRepository.findOne({ where: { slug: normalizedSlug } });
+
+    if (!community) {
+      throw new NotFoundException(`Community with slug ${slug} not found.`);
+    }
+
+    return community;
+  }
+
   async update(id: number, updateCommunityDto: UpdateCommunityDto): Promise<Community> {
     const community = await this.findById(id);
 

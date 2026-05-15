@@ -45,13 +45,16 @@ describe('PostsService', () => {
   let service: PostsService;
   let postsRepository: MockRepository<Post>;
   let postVotesRepository: MockRepository<PostVote>;
-  let communitiesService: { findById: jest.Mock };
+  let communitiesService: { findById: jest.Mock; findBySlug: jest.Mock };
   let cacheService: { getOrSet: jest.Mock; invalidatePatterns: jest.Mock; createKey: jest.Mock };
 
   beforeEach(async () => {
     postsRepository = createMockRepository<Post>();
     postVotesRepository = createMockRepository<PostVote>();
-    communitiesService = { findById: jest.fn().mockResolvedValue(communityEntity) };
+    communitiesService = {
+      findById: jest.fn().mockResolvedValue(communityEntity),
+      findBySlug: jest.fn().mockResolvedValue(communityEntity),
+    };
     cacheService = {
       getOrSet: jest.fn((key: string, ttl: number, factory: () => Promise<unknown>) => factory()),
       invalidatePatterns: jest.fn().mockResolvedValue(undefined),
@@ -102,6 +105,29 @@ describe('PostsService', () => {
     expect(result).toMatchObject({ id: 10, slug: 'discussing-nestjs-apis-on-reddit' });
   });
 
+  it('creates a nested community post without requiring communityId in the request body', async () => {
+    postsRepository.findOne!.mockResolvedValue(null);
+
+    await service.createInCommunityId(
+      5,
+      {
+        title: 'Nested community post',
+        content: 'This submission is created inside r/nestjs.',
+        published: true,
+      },
+      user,
+    );
+
+    expect(communitiesService.findById).toHaveBeenCalledWith(5);
+    expect(postsRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'Nested community post',
+        community: communityEntity,
+        author: { id: user.id },
+      }),
+    );
+  });
+
   it('adds filters, sorting, pagination, and metadata when listing posts', async () => {
     const post = { id: 1, title: 'NestJS', author: authorEntity, community: communityEntity };
     const qb = createQueryBuilderMock();
@@ -134,6 +160,19 @@ describe('PostsService', () => {
     expect(qb.skip).toHaveBeenCalledWith(5);
     expect(qb.take).toHaveBeenCalledWith(5);
     expect(result.meta).toMatchObject({ page: 2, limit: 5, total: 1, totalPages: 1 });
+  });
+
+  it('lists posts for an r/{communitySlug} community feed', async () => {
+    const qb = createQueryBuilderMock();
+    qb.getManyAndCount.mockResolvedValue([[], 0]);
+    postsRepository.createQueryBuilder!.mockReturnValue(qb);
+
+    await service.findAllByCommunitySlug('NestJS', { page: 1, limit: 10 }, null);
+
+    expect(communitiesService.findBySlug).toHaveBeenCalledWith('NestJS');
+    expect(qb.andWhere).toHaveBeenCalledWith('community.slug = :communitySlug', {
+      communitySlug: 'nestjs',
+    });
   });
 
   it('lists only the authenticated user posts from findMine', async () => {
