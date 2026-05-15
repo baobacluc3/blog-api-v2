@@ -9,7 +9,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { Category } from '../../categories/entities/category.entity';
+import { Community } from '../../communities/entities/community.entity';
 import { Comment } from '../../comments/entities/comment.entity';
 import { PostVote } from './post-vote.entity';
 import { User } from '../../users/entities/user.entity';
@@ -76,8 +76,8 @@ export class Post {
   @ManyToOne(() => User, (user) => user.posts, { onDelete: 'CASCADE', eager: false })
   author: User;
 
-  @ManyToOne(() => Category, (category) => category.posts, { eager: false })
-  category: Category;
+  @ManyToOne(() => Community, (community) => community.posts, { eager: false })
+  community: Community;
 
   @OneToMany(() => Comment, (comment) => comment.post)
   comments: Comment[];

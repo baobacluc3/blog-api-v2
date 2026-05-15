@@ -3,7 +3,7 @@ import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CacheService } from '../cache/cache.service';
-import { CategoriesService } from '../categories/categories.service';
+import { CommunitiesService } from '../communities/communities.service';
 import { Role } from '../common/enums/role.enum';
 import { SortOrder } from '../common/enums/sort-order.enum';
 import { AuthUser } from '../common/interfaces/auth-user.interface';
@@ -19,7 +19,7 @@ const otherUser: AuthUser = { id: 2, email: 'other@example.com', role: Role.User
 const admin: AuthUser = { id: 3, email: 'admin@example.com', role: Role.Admin };
 
 const authorEntity = { id: 1, name: 'User', email: 'user@example.com' };
-const categoryEntity = { id: 5, name: 'NestJS', slug: 'nestjs' };
+const communityEntity = { id: 5, name: 'NestJS', slug: 'nestjs' };
 
 const createMockRepository = <T extends object>(): MockRepository<T> => ({
   create: jest.fn((entity) => entity),
@@ -45,13 +45,13 @@ describe('PostsService', () => {
   let service: PostsService;
   let postsRepository: MockRepository<Post>;
   let postVotesRepository: MockRepository<PostVote>;
-  let categoriesService: { findById: jest.Mock };
+  let communitiesService: { findById: jest.Mock };
   let cacheService: { getOrSet: jest.Mock; invalidatePatterns: jest.Mock; createKey: jest.Mock };
 
   beforeEach(async () => {
     postsRepository = createMockRepository<Post>();
     postVotesRepository = createMockRepository<PostVote>();
-    categoriesService = { findById: jest.fn().mockResolvedValue(categoryEntity) };
+    communitiesService = { findById: jest.fn().mockResolvedValue(communityEntity) };
     cacheService = {
       getOrSet: jest.fn((key: string, ttl: number, factory: () => Promise<unknown>) => factory()),
       invalidatePatterns: jest.fn().mockResolvedValue(undefined),
@@ -65,7 +65,7 @@ describe('PostsService', () => {
         PostsService,
         { provide: getRepositoryToken(Post), useValue: postsRepository },
         { provide: getRepositoryToken(PostVote), useValue: postVotesRepository },
-        { provide: CategoriesService, useValue: categoriesService },
+        { provide: CommunitiesService, useValue: communitiesService },
         { provide: CacheService, useValue: cacheService },
       ],
     }).compile();
@@ -78,19 +78,19 @@ describe('PostsService', () => {
 
     const result = await service.create(
       {
-        title: 'Building REST APIs with NestJS',
+        title: 'Discussing NestJS APIs on Reddit',
         content: 'NestJS gives junior backend developers a clean structure for real APIs.',
         tags: ['Nest JS', 'Backend', 'backend'],
         published: true,
-        categoryId: 5,
+        communityId: 5,
       },
       user,
     );
 
-    expect(categoriesService.findById).toHaveBeenCalledWith(5);
+    expect(communitiesService.findById).toHaveBeenCalledWith(5);
     expect(postsRepository.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        slug: 'building-rest-apis-with-nestjs',
+        slug: 'discussing-nestjs-apis-on-reddit',
         tags: ['nest-js', 'backend'],
         readingTimeMinutes: 1,
         excerpt: 'NestJS gives junior backend developers a clean structure for real APIs.',
@@ -99,11 +99,11 @@ describe('PostsService', () => {
         author: { id: user.id },
       }),
     );
-    expect(result).toMatchObject({ id: 10, slug: 'building-rest-apis-with-nestjs' });
+    expect(result).toMatchObject({ id: 10, slug: 'discussing-nestjs-apis-on-reddit' });
   });
 
   it('adds filters, sorting, pagination, and metadata when listing posts', async () => {
-    const post = { id: 1, title: 'NestJS', author: authorEntity, category: categoryEntity };
+    const post = { id: 1, title: 'NestJS', author: authorEntity, community: communityEntity };
     const qb = createQueryBuilderMock();
     qb.getManyAndCount.mockResolvedValue([[post], 1]);
     postsRepository.createQueryBuilder!.mockReturnValue(qb);
@@ -113,7 +113,7 @@ describe('PostsService', () => {
         page: 2,
         limit: 5,
         search: 'api',
-        categorySlug: 'nestjs',
+        communitySlug: 'nestjs',
         authorId: 1,
         tag: 'backend',
         sortBy: PostSortBy.ViewCount,
@@ -122,8 +122,8 @@ describe('PostsService', () => {
       null,
     );
 
-    expect(qb.andWhere).toHaveBeenCalledWith('category.slug = :categorySlug', {
-      categorySlug: 'nestjs',
+    expect(qb.andWhere).toHaveBeenCalledWith('community.slug = :communitySlug', {
+      communitySlug: 'nestjs',
     });
     expect(qb.andWhere).toHaveBeenCalledWith('author.id = :authorIdFilter', {
       authorIdFilter: 1,
@@ -154,7 +154,7 @@ describe('PostsService', () => {
       published: true,
       viewCount: 3,
       author: authorEntity,
-      category: categoryEntity,
+      community: communityEntity,
       comments: [],
     } as unknown as Post;
     postsRepository.findOne!.mockResolvedValue(post);
@@ -171,7 +171,7 @@ describe('PostsService', () => {
       published: true,
       viewCount: 3,
       author: authorEntity,
-      category: categoryEntity,
+      community: communityEntity,
       comments: [],
     } as unknown as Post;
     postsRepository.findOne!.mockResolvedValue(post);
@@ -196,7 +196,7 @@ describe('PostsService', () => {
       published: false,
       publishedAt: null,
       author: authorEntity,
-      category: categoryEntity,
+      community: communityEntity,
     } as unknown as Post;
     postsRepository.findOne!.mockResolvedValue(post);
 
@@ -207,7 +207,7 @@ describe('PostsService', () => {
   });
 
   it('soft deletes posts instead of hard deleting them', async () => {
-    const post = { id: 1, author: authorEntity, category: categoryEntity } as unknown as Post;
+    const post = { id: 1, author: authorEntity, community: communityEntity } as unknown as Post;
     postsRepository.findOne!.mockResolvedValue(post);
 
     await service.remove(1, user);
@@ -216,7 +216,7 @@ describe('PostsService', () => {
   });
 
   it('rejects updates from users who are not the author or admin', async () => {
-    const post = { id: 1, author: authorEntity, category: categoryEntity } as unknown as Post;
+    const post = { id: 1, author: authorEntity, community: communityEntity } as unknown as Post;
     postsRepository.findOne!.mockResolvedValue(post);
 
     await expect(service.update(1, { title: 'Updated title' }, otherUser)).rejects.toBeInstanceOf(

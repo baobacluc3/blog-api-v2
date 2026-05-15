@@ -7,7 +7,7 @@ import {
   getCachePatterns,
   getCacheTtlSeconds,
 } from '../cache/redis-cache.constants';
-import { CategoriesService } from '../categories/categories.service';
+import { CommunitiesService } from '../communities/communities.service';
 import { PaginationMetaDto } from '../common/dto/pagination-meta.dto';
 import { VoteDto } from '../common/dto/vote.dto';
 import { Role } from '../common/enums/role.enum';
@@ -36,12 +36,12 @@ export class PostsService {
     private readonly postsRepository: Repository<Post>,
     @InjectRepository(PostVote)
     private readonly postVotesRepository: Repository<PostVote>,
-    private readonly categoriesService: CategoriesService,
+    private readonly communitiesService: CommunitiesService,
     private readonly cacheService: CacheService,
   ) {}
 
   async create(createPostDto: CreatePostDto, author: AuthUser): Promise<Post> {
-    const category = await this.categoriesService.findById(createPostDto.categoryId);
+    const community = await this.communitiesService.findById(createPostDto.communityId);
     const slug = await this.generateUniqueSlug(createPostDto.title);
     const published = createPostDto.published ?? false;
 
@@ -60,7 +60,7 @@ export class PostsService {
       tags: this.normalizeTags(createPostDto.tags),
       readingTimeMinutes: this.calculateReadingTime(createPostDto.content),
       author: { id: author.id },
-      category,
+      community,
     });
 
     const savedPost = await this.postsRepository.save(post);
@@ -116,7 +116,7 @@ export class PostsService {
         this.postsRepository
           .createQueryBuilder('post')
           .leftJoinAndSelect('post.author', 'author')
-          .leftJoinAndSelect('post.category', 'category')
+          .leftJoinAndSelect('post.community', 'community')
           .loadRelationCountAndMap('post.commentCount', 'post.comments')
           .where('post.published = true')
           .orderBy('post.viewCount', SortOrder.Desc)
@@ -142,8 +142,8 @@ export class PostsService {
   async update(id: number, updatePostDto: UpdatePostDto, requester: AuthUser): Promise<Post> {
     const post = await this.findOwnedPost(id, requester);
 
-    if (updatePostDto.categoryId) {
-      post.category = await this.categoriesService.findById(updatePostDto.categoryId);
+    if (updatePostDto.communityId) {
+      post.community = await this.communitiesService.findById(updatePostDto.communityId);
     }
 
     if (updatePostDto.title && updatePostDto.title !== post.title) {
@@ -204,7 +204,7 @@ export class PostsService {
   async vote(id: number, voteDto: VoteDto, requester: AuthUser): Promise<Post> {
     const post = await this.postsRepository.findOne({
       where: { id },
-      relations: { author: true, category: true },
+      relations: { author: true, community: true },
     });
 
     if (!post) {
@@ -264,11 +264,11 @@ export class PostsService {
     const qb = this.postsRepository
       .createQueryBuilder('post')
       .leftJoinAndSelect('post.author', 'author')
-      .leftJoinAndSelect('post.category', 'category')
+      .leftJoinAndSelect('post.community', 'community')
       .loadRelationCountAndMap('post.commentCount', 'post.comments');
 
     this.applySearchFilter(qb, query.search);
-    this.applyCategoryFilter(qb, query.categoryId, query.categorySlug);
+    this.applyCommunityFilter(qb, query.communityId, query.communitySlug);
     this.applyAuthorFilter(qb, query.authorId);
     this.applyTagFilter(qb, query.tag);
     this.applyVisibilityFilter(qb, query.published, requester);
@@ -293,17 +293,17 @@ export class PostsService {
     );
   }
 
-  private applyCategoryFilter(
+  private applyCommunityFilter(
     qb: SelectQueryBuilder<Post>,
-    categoryId?: number,
-    categorySlug?: string,
+    communityId?: number,
+    communitySlug?: string,
   ): void {
-    if (categoryId) {
-      qb.andWhere('category.id = :categoryId', { categoryId });
+    if (communityId) {
+      qb.andWhere('community.id = :communityId', { communityId });
     }
 
-    if (categorySlug) {
-      qb.andWhere('category.slug = :categorySlug', { categorySlug });
+    if (communitySlug) {
+      qb.andWhere('community.slug = :communitySlug', { communitySlug });
     }
   }
 
@@ -390,7 +390,7 @@ export class PostsService {
   ): Promise<Post> {
     const post = await this.postsRepository.findOne({
       where,
-      relations: { author: true, category: true, comments: { author: true } },
+      relations: { author: true, community: true, comments: { author: true } },
       order: { comments: { createdAt: 'DESC' } },
     });
 
@@ -406,7 +406,7 @@ export class PostsService {
   private async findOwnedPost(id: number, requester: AuthUser): Promise<Post> {
     const post = await this.postsRepository.findOne({
       where: { id },
-      relations: { author: true, category: true },
+      relations: { author: true, community: true },
     });
 
     if (!post) {

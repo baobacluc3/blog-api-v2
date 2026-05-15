@@ -29,7 +29,7 @@ const transformStringArray = ({ value }: { value: unknown }): unknown => {
 };
 
 export class CreatePostDto {
-  @ApiProperty({ example: 'Building REST APIs with NestJS' })
+  @ApiProperty({ example: 'Discussing NestJS APIs on Reddit' })
   @IsString()
   @MinLength(3)
   @MaxLength(180)
@@ -95,5 +95,5 @@ export class CreatePostDto {
   @Transform(({ value }) => Number(value))
   @IsInt()
   @Min(1)
-  categoryId: number;
+  communityId: number;
 }

@@ -16,7 +16,7 @@ interface LocalThrottleRecord {
 export class RedisThrottlerStorageService implements ThrottlerStorage {
   private readonly logger = new Logger(RedisThrottlerStorageService.name);
   private readonly localStorage = new Map<string, LocalThrottleRecord>();
-  private readonly keyPrefix = `${process.env.CACHE_KEY_PREFIX || 'blog-api'}:throttle`;
+  private readonly keyPrefix = `${process.env.CACHE_KEY_PREFIX || 'reddit-clone-api'}:throttle`;
 
   constructor(private readonly redisClient: RedisClientService) {}
 

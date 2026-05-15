@@ -34,13 +34,13 @@ export class PostsQueryDto {
   @Transform(({ value }) => Number(value))
   @IsInt()
   @Min(1)
-  categoryId?: number;
+  communityId?: number;
 
   @ApiPropertyOptional({ example: 'nestjs' })
   @IsOptional()
   @Transform(trimString)
   @IsString()
-  categorySlug?: string;
+  communitySlug?: string;
 
   @ApiPropertyOptional({ example: 1 })
   @IsOptional()
