@@ -11,6 +11,7 @@ import {
 } from 'typeorm';
 import { Post } from '../../posts/entities/post.entity';
 import { User } from '../../users/entities/user.entity';
+import { CommentVote } from './comment-vote.entity';
 
 @Entity('comments')
 export class Comment {
@@ -39,11 +40,25 @@ export class Comment {
   @OneToMany(() => Comment, (comment) => comment.parent)
   replies!: Comment[];
 
+  @OneToMany(() => CommentVote, (vote) => vote.comment)
+  votes!: CommentVote[];
+
+  @Column({ type: 'int', default: 0 })
+  score!: number;
+
+  @Column({ type: 'int', default: 0 })
+  upvoteCount!: number;
+
+  @Column({ type: 'int', default: 0 })
+  downvoteCount!: number;
+
   @CreateDateColumn()
   createdAt!: Date;
 
   @UpdateDateColumn()
   updatedAt!: Date;
+
+  userVote?: number | null;
 
   @DeleteDateColumn({ nullable: true })
   deletedAt!: Date | null;

@@ -9,8 +9,9 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { Category } from '../../categories/entities/category.entity';
+import { Community } from '../../communities/entities/community.entity';
 import { Comment } from '../../comments/entities/comment.entity';
+import { PostVote } from './post-vote.entity';
 import { User } from '../../users/entities/user.entity';
 
 @Entity('posts')
@@ -51,16 +52,42 @@ export class Post {
   @Column({ type: 'int', default: 0 })
   viewCount: number;
 
+  @Column({ type: 'int', default: 0 })
+  score: number;
+
+  @Column({ type: 'int', default: 0 })
+  upvoteCount: number;
+
+  @Column({ type: 'int', default: 0 })
+  downvoteCount: number;
+
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  url: string | null;
+
+  @Column({ type: 'varchar', length: 120, nullable: true })
+  domain: string | null;
+
+  @Column({ type: 'varchar', length: 40, nullable: true })
+  flair: string | null;
+
+  @Column({ default: false })
+  nsfw: boolean;
+
   @ManyToOne(() => User, (user) => user.posts, { onDelete: 'CASCADE', eager: false })
   author: User;
 
-  @ManyToOne(() => Category, (category) => category.posts, { eager: false })
-  category: Category;
+  @ManyToOne(() => Community, (community) => community.posts, { eager: false })
+  community: Community;
 
   @OneToMany(() => Comment, (comment) => comment.post)
   comments: Comment[];
 
+  @OneToMany(() => PostVote, (vote) => vote.post)
+  votes: PostVote[];
+
   commentCount?: number;
+
+  userVote?: number | null;
 
   @CreateDateColumn()
   createdAt: Date;

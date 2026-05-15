@@ -1,22 +1,26 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Brackets, Repository, SelectQueryBuilder } from 'typeorm';
+import { Brackets, In, Repository, SelectQueryBuilder } from 'typeorm';
 import { CacheService } from '../cache/cache.service';
 import {
   getCacheKeyPrefix,
   getCachePatterns,
   getCacheTtlSeconds,
 } from '../cache/redis-cache.constants';
-import { CategoriesService } from '../categories/categories.service';
+import { CommunitiesService } from '../communities/communities.service';
 import { PaginationMetaDto } from '../common/dto/pagination-meta.dto';
+import { VoteDto } from '../common/dto/vote.dto';
 import { Role } from '../common/enums/role.enum';
 import { SortOrder } from '../common/enums/sort-order.enum';
+import { VoteValue } from '../common/enums/vote-value.enum';
 import { AuthUser } from '../common/interfaces/auth-user.interface';
 import { slugify } from '../common/utils/slugify';
+import { CreateCommunityPostDto } from './dto/create-community-post.dto';
 import { CreatePostDto } from './dto/create-post.dto';
 import { PostSortBy } from './dto/post-sort-by.enum';
 import { PostsQueryDto } from './dto/posts-query.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
+import { PostVote } from './entities/post-vote.entity';
 import { Post } from './entities/post.entity';
 
 export interface PaginatedPosts {
@@ -31,12 +35,22 @@ export class PostsService {
   constructor(
     @InjectRepository(Post)
     private readonly postsRepository: Repository<Post>,
-    private readonly categoriesService: CategoriesService,
+    @InjectRepository(PostVote)
+    private readonly postVotesRepository: Repository<PostVote>,
+    private readonly communitiesService: CommunitiesService,
     private readonly cacheService: CacheService,
   ) {}
 
   async create(createPostDto: CreatePostDto, author: AuthUser): Promise<Post> {
-    const category = await this.categoriesService.findById(createPostDto.categoryId);
+    return this.createInCommunityId(createPostDto.communityId, createPostDto, author);
+  }
+
+  async createInCommunityId(
+    communityId: number,
+    createPostDto: CreateCommunityPostDto,
+    author: AuthUser,
+  ): Promise<Post> {
+    const community = await this.communitiesService.findById(communityId);
     const slug = await this.generateUniqueSlug(createPostDto.title);
     const published = createPostDto.published ?? false;
 
@@ -46,12 +60,16 @@ export class PostsService {
       content: createPostDto.content,
       excerpt: createPostDto.excerpt ?? this.generateExcerpt(createPostDto.content),
       coverImage: createPostDto.coverImage ?? null,
+      url: createPostDto.url ?? null,
+      domain: createPostDto.url ? this.extractDomain(createPostDto.url) : null,
+      flair: createPostDto.flair ?? null,
+      nsfw: createPostDto.nsfw ?? false,
       published,
       publishedAt: published ? new Date() : null,
       tags: this.normalizeTags(createPostDto.tags),
       readingTimeMinutes: this.calculateReadingTime(createPostDto.content),
       author: { id: author.id },
-      category,
+      community,
     });
 
     const savedPost = await this.postsRepository.save(post);
@@ -59,6 +77,33 @@ export class PostsService {
       await this.invalidatePublicPostCaches();
     }
     return savedPost;
+  }
+
+  async createInCommunitySlug(
+    communitySlug: string,
+    createPostDto: CreateCommunityPostDto,
+    author: AuthUser,
+  ): Promise<Post> {
+    const community = await this.communitiesService.findBySlug(communitySlug);
+    return this.createInCommunityId(community.id, createPostDto, author);
+  }
+
+  async findAllByCommunityId(
+    communityId: number,
+    query: PostsQueryDto,
+    requester?: AuthUser | null,
+  ): Promise<PaginatedPosts> {
+    await this.communitiesService.findById(communityId);
+    return this.findAll({ ...query, communityId }, requester);
+  }
+
+  async findAllByCommunitySlug(
+    communitySlug: string,
+    query: PostsQueryDto,
+    requester?: AuthUser | null,
+  ): Promise<PaginatedPosts> {
+    const community = await this.communitiesService.findBySlug(communitySlug);
+    return this.findAll({ ...query, communitySlug: community.slug }, requester);
   }
 
   async findAll(query: PostsQueryDto, requester?: AuthUser | null): Promise<PaginatedPosts> {
@@ -69,6 +114,7 @@ export class PostsService {
     const fetchPosts = async () => {
       const qb = this.buildPostsQuery(query, requester).skip(skip).take(limit);
       const [data, total] = await qb.getManyAndCount();
+      await this.applyRequesterVotes(data, requester);
 
       return {
         data,
@@ -107,7 +153,7 @@ export class PostsService {
         this.postsRepository
           .createQueryBuilder('post')
           .leftJoinAndSelect('post.author', 'author')
-          .leftJoinAndSelect('post.category', 'category')
+          .leftJoinAndSelect('post.community', 'community')
           .loadRelationCountAndMap('post.commentCount', 'post.comments')
           .where('post.published = true')
           .orderBy('post.viewCount', SortOrder.Desc)
@@ -121,20 +167,22 @@ export class PostsService {
   async findOne(id: number, requester?: AuthUser | null): Promise<Post> {
     const post = await this.findPostForRead({ id }, requester);
     await this.incrementViewCount(post, requester);
+    await this.applyRequesterVote(post, requester);
     return post;
   }
 
   async findBySlug(slug: string, requester?: AuthUser | null): Promise<Post> {
     const post = await this.findPostForRead({ slug }, requester);
     await this.incrementViewCount(post, requester);
+    await this.applyRequesterVote(post, requester);
     return post;
   }
 
   async update(id: number, updatePostDto: UpdatePostDto, requester: AuthUser): Promise<Post> {
     const post = await this.findOwnedPost(id, requester);
 
-    if (updatePostDto.categoryId) {
-      post.category = await this.categoriesService.findById(updatePostDto.categoryId);
+    if (updatePostDto.communityId) {
+      post.community = await this.communitiesService.findById(updatePostDto.communityId);
     }
 
     if (updatePostDto.title && updatePostDto.title !== post.title) {
@@ -153,6 +201,12 @@ export class PostsService {
 
     if (updatePostDto.excerpt !== undefined) post.excerpt = updatePostDto.excerpt ?? null;
     if (updatePostDto.coverImage !== undefined) post.coverImage = updatePostDto.coverImage ?? null;
+    if (updatePostDto.url !== undefined) {
+      post.url = updatePostDto.url ?? null;
+      post.domain = updatePostDto.url ? this.extractDomain(updatePostDto.url) : null;
+    }
+    if (updatePostDto.flair !== undefined) post.flair = updatePostDto.flair ?? null;
+    if (updatePostDto.nsfw !== undefined) post.nsfw = updatePostDto.nsfw;
     if (updatePostDto.tags !== undefined) post.tags = this.normalizeTags(updatePostDto.tags);
 
     if (updatePostDto.published !== undefined) {
@@ -186,6 +240,69 @@ export class PostsService {
     await this.invalidatePublicPostCaches();
   }
 
+  async vote(id: number, voteDto: VoteDto, requester: AuthUser): Promise<Post> {
+    return this.applyVote(id, voteDto.value, requester);
+  }
+
+  async clearVote(id: number, requester: AuthUser): Promise<Post> {
+    return this.applyVote(id, VoteValue.NoVote, requester);
+  }
+
+  private async applyVote(id: number, value: VoteValue, requester: AuthUser): Promise<Post> {
+    const post = await this.postsRepository.findOne({
+      where: { id },
+      relations: { author: true, community: true },
+    });
+
+    if (!post) {
+      throw new NotFoundException(`Post with id ${id} not found.`);
+    }
+
+    if (!post.published) {
+      throw new ForbiddenException('You can only vote on published posts.');
+    }
+
+    const existingVote = await this.postVotesRepository.findOne({
+      where: { post: { id }, user: { id: requester.id } },
+    });
+
+    if (existingVote?.value === value) {
+      post.userVote = value === VoteValue.NoVote ? null : value;
+      return post;
+    }
+
+    const delta = this.calculateVoteDelta(existingVote?.value, value);
+
+    if (value === VoteValue.NoVote) {
+      if (existingVote) {
+        await this.postVotesRepository.delete({ id: existingVote.id });
+      }
+    } else if (existingVote) {
+      existingVote.value = value;
+      await this.postVotesRepository.save(existingVote);
+    } else {
+      await this.postVotesRepository.save(
+        this.postVotesRepository.create({
+          post: { id },
+          user: { id: requester.id },
+          value,
+        }),
+      );
+    }
+
+    if (delta.score) await this.postsRepository.increment({ id }, 'score', delta.score);
+    if (delta.upvotes) await this.postsRepository.increment({ id }, 'upvoteCount', delta.upvotes);
+    if (delta.downvotes)
+      await this.postsRepository.increment({ id }, 'downvoteCount', delta.downvotes);
+    await this.invalidatePublicPostCaches();
+
+    post.score = (post.score ?? 0) + delta.score;
+    post.upvoteCount = (post.upvoteCount ?? 0) + delta.upvotes;
+    post.downvoteCount = (post.downvoteCount ?? 0) + delta.downvotes;
+    post.userVote = value === VoteValue.NoVote ? null : value;
+    return post;
+  }
+
   private async invalidatePublicPostCaches(): Promise<void> {
     await this.cacheService.invalidatePatterns([
       getCachePatterns().publishedPosts,
@@ -200,11 +317,11 @@ export class PostsService {
     const qb = this.postsRepository
       .createQueryBuilder('post')
       .leftJoinAndSelect('post.author', 'author')
-      .leftJoinAndSelect('post.category', 'category')
+      .leftJoinAndSelect('post.community', 'community')
       .loadRelationCountAndMap('post.commentCount', 'post.comments');
 
     this.applySearchFilter(qb, query.search);
-    this.applyCategoryFilter(qb, query.categoryId, query.categorySlug);
+    this.applyCommunityFilter(qb, query.communityId, query.communitySlug);
     this.applyAuthorFilter(qb, query.authorId);
     this.applyTagFilter(qb, query.tag);
     this.applyVisibilityFilter(qb, query.published, requester);
@@ -229,17 +346,17 @@ export class PostsService {
     );
   }
 
-  private applyCategoryFilter(
+  private applyCommunityFilter(
     qb: SelectQueryBuilder<Post>,
-    categoryId?: number,
-    categorySlug?: string,
+    communityId?: number,
+    communitySlug?: string,
   ): void {
-    if (categoryId) {
-      qb.andWhere('category.id = :categoryId', { categoryId });
+    if (communityId) {
+      qb.andWhere('community.id = :communityId', { communityId });
     }
 
-    if (categorySlug) {
-      qb.andWhere('category.slug = :categorySlug', { categorySlug });
+    if (communitySlug) {
+      qb.andWhere('community.slug = :communitySlug', { communitySlug });
     }
   }
 
@@ -266,7 +383,16 @@ export class PostsService {
       [PostSortBy.PublishedAt]: 'post.publishedAt',
       [PostSortBy.ViewCount]: 'post.viewCount',
       [PostSortBy.ReadingTime]: 'post.readingTimeMinutes',
+      [PostSortBy.Score]: 'post.score',
+      [PostSortBy.Hot]: 'post.score',
     };
+
+    if (sortBy === PostSortBy.Hot) {
+      qb.orderBy('post.score', SortOrder.Desc)
+        .addOrderBy('post.viewCount', SortOrder.Desc)
+        .addOrderBy('post.createdAt', SortOrder.Desc);
+      return;
+    }
 
     qb.orderBy(sortableColumns[sortBy], sortOrder).addOrderBy('post.id', SortOrder.Desc);
   }
@@ -311,13 +437,48 @@ export class PostsService {
     qb.andWhere('post.published = true');
   }
 
+  private async applyRequesterVote(post: Post, requester?: AuthUser | null): Promise<void> {
+    if (!requester) {
+      post.userVote = null;
+      return;
+    }
+
+    const vote = await this.postVotesRepository.findOne({
+      where: { post: { id: post.id }, user: { id: requester.id } },
+    });
+    post.userVote = vote?.value ?? null;
+  }
+
+  private async applyRequesterVotes(posts: Post[], requester?: AuthUser | null): Promise<void> {
+    if (!posts.length) {
+      return;
+    }
+
+    if (!requester) {
+      posts.forEach((post) => {
+        post.userVote = null;
+      });
+      return;
+    }
+
+    const votes = await this.postVotesRepository.find({
+      where: { post: { id: In(posts.map((post) => post.id)) }, user: { id: requester.id } },
+      relations: { post: true },
+    });
+    const votesByPostId = new Map(votes.map((vote) => [vote.post.id, vote.value]));
+
+    posts.forEach((post) => {
+      post.userVote = votesByPostId.get(post.id) ?? null;
+    });
+  }
+
   private async findPostForRead(
     where: Pick<Post, 'id'> | Pick<Post, 'slug'>,
     requester?: AuthUser | null,
   ): Promise<Post> {
     const post = await this.postsRepository.findOne({
       where,
-      relations: { author: true, category: true, comments: { author: true } },
+      relations: { author: true, community: true, comments: { author: true } },
       order: { comments: { createdAt: 'DESC' } },
     });
 
@@ -333,7 +494,7 @@ export class PostsService {
   private async findOwnedPost(id: number, requester: AuthUser): Promise<Post> {
     const post = await this.postsRepository.findOne({
       where: { id },
-      relations: { author: true, category: true },
+      relations: { author: true, community: true },
     });
 
     if (!post) {
@@ -405,6 +566,26 @@ export class PostsService {
     }
 
     return [...new Set(tags.map((tag) => slugify(tag)).filter(Boolean))];
+  }
+
+  private calculateVoteDelta(
+    oldValue: number | undefined,
+    newValue: VoteValue,
+  ): { score: number; upvotes: number; downvotes: number } {
+    return {
+      score: newValue - (oldValue ?? 0),
+      upvotes: (newValue === VoteValue.Upvote ? 1 : 0) - (oldValue === VoteValue.Upvote ? 1 : 0),
+      downvotes:
+        (newValue === VoteValue.Downvote ? 1 : 0) - (oldValue === VoteValue.Downvote ? 1 : 0),
+    };
+  }
+
+  private extractDomain(url: string): string | null {
+    try {
+      return new URL(url).hostname.replace(/^www\./, '');
+    } catch {
+      return null;
+    }
   }
 
   private async generateUniqueSlug(title: string, ignoreId?: number): Promise<string> {
