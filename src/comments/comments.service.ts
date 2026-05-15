@@ -5,15 +5,19 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { PaginationMetaDto } from '../common/dto/pagination-meta.dto';
+import { VoteDto } from '../common/dto/vote.dto';
 import { Role } from '../common/enums/role.enum';
+import { VoteValue } from '../common/enums/vote-value.enum';
 import { AuthUser } from '../common/interfaces/auth-user.interface';
 import { Post } from '../posts/entities/post.entity';
+import { User } from '../users/entities/user.entity';
 import { PostsService } from '../posts/posts.service';
 import { CreateCommentDto } from './dto/create-comment.dto';
 import { GetCommentsQueryDto } from './dto/get-comments-query.dto';
 import { UpdateCommentDto } from './dto/update-comment.dto';
+import { CommentVote } from './entities/comment-vote.entity';
 import { Comment } from './entities/comment.entity';
 
 export type CommentAuthorResponse = {
@@ -26,6 +30,10 @@ export type CommentResponse = {
   id: number;
   content: string;
   author: CommentAuthorResponse;
+  score: number;
+  upvoteCount: number;
+  downvoteCount: number;
+  userVote: number | null;
   replies?: CommentResponse[];
   createdAt: Date;
   updatedAt: Date;
@@ -41,6 +49,10 @@ export class CommentsService {
   constructor(
     @InjectRepository(Comment)
     private readonly commentsRepository: Repository<Comment>,
+    @InjectRepository(CommentVote)
+    private readonly commentVotesRepository: Repository<CommentVote>,
+    @InjectRepository(User)
+    private readonly usersRepository: Repository<User>,
     @InjectRepository(Post)
     private readonly postsRepository: Repository<Post>,
     private readonly postsService: PostsService,
@@ -56,6 +68,7 @@ export class CommentsService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
+    const sortColumn = query.sort === 'top' ? 'comment.score' : 'comment.createdAt';
     const sortDirection = query.sort === 'oldest' ? 'ASC' : 'DESC';
 
     const qb = this.commentsRepository
@@ -65,12 +78,13 @@ export class CommentsService {
       .leftJoinAndSelect('reply.author', 'replyAuthor')
       .where('comment.postId = :postId', { postId })
       .andWhere('comment.parentId IS NULL')
-      .orderBy('comment.createdAt', sortDirection)
+      .orderBy(sortColumn, sortDirection)
       .addOrderBy('reply.createdAt', 'ASC')
       .skip(skip)
       .take(limit);
 
     const [comments, total] = await qb.getManyAndCount();
+    await this.applyRequesterVotes(comments, requester);
 
     return {
       data: comments.map((comment) => this.toCommentResponse(comment, true)),
@@ -157,6 +171,77 @@ export class CommentsService {
     return this.findActiveCommentResponse(updatedComment.id);
   }
 
+  async vote(id: number, voteDto: VoteDto, requester: AuthUser): Promise<CommentResponse> {
+    return this.applyVote(id, voteDto.value, requester);
+  }
+
+  async clearVote(id: number, requester: AuthUser): Promise<CommentResponse> {
+    return this.applyVote(id, VoteValue.NoVote, requester);
+  }
+
+  private async applyVote(
+    id: number,
+    value: VoteValue,
+    requester: AuthUser,
+  ): Promise<CommentResponse> {
+    const comment = await this.commentsRepository.findOne({
+      where: { id },
+      relations: { author: true, post: true },
+    });
+
+    if (!comment) {
+      throw new NotFoundException(`Comment with id ${id} not found.`);
+    }
+
+    if (!comment.post.published) {
+      throw new ForbiddenException('You can only vote on comments under published posts.');
+    }
+
+    const existingVote = await this.commentVotesRepository.findOne({
+      where: { comment: { id }, user: { id: requester.id } },
+    });
+
+    if (existingVote?.value === value) {
+      comment.userVote = value === VoteValue.NoVote ? null : value;
+      return this.toCommentResponse(comment);
+    }
+
+    const delta = this.calculateVoteDelta(existingVote?.value, value);
+
+    if (value === VoteValue.NoVote) {
+      if (existingVote) {
+        await this.commentVotesRepository.delete({ id: existingVote.id });
+      }
+    } else if (existingVote) {
+      existingVote.value = value;
+      await this.commentVotesRepository.save(existingVote);
+    } else {
+      await this.commentVotesRepository.save(
+        this.commentVotesRepository.create({
+          comment: { id },
+          user: { id: requester.id },
+          value,
+        }),
+      );
+    }
+
+    if (delta.score) {
+      await this.commentsRepository.increment({ id }, 'score', delta.score);
+      await this.usersRepository.increment({ id: comment.author.id }, 'commentKarma', delta.score);
+    }
+    if (delta.upvotes)
+      await this.commentsRepository.increment({ id }, 'upvoteCount', delta.upvotes);
+    if (delta.downvotes) {
+      await this.commentsRepository.increment({ id }, 'downvoteCount', delta.downvotes);
+    }
+
+    comment.score = (comment.score ?? 0) + delta.score;
+    comment.upvoteCount = (comment.upvoteCount ?? 0) + delta.upvotes;
+    comment.downvoteCount = (comment.downvoteCount ?? 0) + delta.downvotes;
+    comment.userVote = value === VoteValue.NoVote ? null : value;
+    return this.toCommentResponse(comment);
+  }
+
   async remove(id: number, requester: AuthUser): Promise<void> {
     const comment = await this.commentsRepository.findOne({
       where: { id },
@@ -214,6 +299,49 @@ export class CommentsService {
     return this.toCommentResponse(comment);
   }
 
+  private async applyRequesterVotes(
+    comments: Comment[],
+    requester?: AuthUser | null,
+  ): Promise<void> {
+    const allComments = comments.flatMap((comment) => [comment, ...(comment.replies ?? [])]);
+
+    if (!allComments.length) {
+      return;
+    }
+
+    if (!requester) {
+      allComments.forEach((comment) => {
+        comment.userVote = null;
+      });
+      return;
+    }
+
+    const votes = await this.commentVotesRepository.find({
+      where: {
+        comment: { id: In(allComments.map((comment) => comment.id)) },
+        user: { id: requester.id },
+      },
+      relations: { comment: true },
+    });
+    const votesByCommentId = new Map(votes.map((vote) => [vote.comment.id, vote.value]));
+
+    allComments.forEach((comment) => {
+      comment.userVote = votesByCommentId.get(comment.id) ?? null;
+    });
+  }
+
+  private calculateVoteDelta(
+    oldValue: number | undefined,
+    newValue: VoteValue,
+  ): { score: number; upvotes: number; downvotes: number } {
+    return {
+      score: newValue - (oldValue ?? 0),
+      upvotes: (newValue === VoteValue.Upvote ? 1 : 0) - (oldValue === VoteValue.Upvote ? 1 : 0),
+      downvotes:
+        (newValue === VoteValue.Downvote ? 1 : 0) - (oldValue === VoteValue.Downvote ? 1 : 0),
+    };
+  }
+
   private toCommentResponse(comment: Comment, includeReplies = false): CommentResponse {
     const response: CommentResponse = {
       id: comment.id,
@@ -223,6 +351,10 @@ export class CommentsService {
         name: comment.author.name,
         email: comment.author.email,
       },
+      score: comment.score,
+      upvoteCount: comment.upvoteCount,
+      downvoteCount: comment.downvoteCount,
+      userVote: comment.userVote ?? null,
       createdAt: comment.createdAt,
       updatedAt: comment.updatedAt,
     };

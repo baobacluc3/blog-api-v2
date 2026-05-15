@@ -13,6 +13,7 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiCreatedResponse, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { VoteDto } from '../common/dto/vote.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { OptionalJwtAuthGuard } from '../common/guards/optional-jwt-auth.guard';
 import { AuthUser } from '../common/interfaces/auth-user.interface';
@@ -79,6 +80,26 @@ export class PostsController {
     @CurrentUser() user: AuthUser,
   ) {
     return this.postsService.update(id, updatePostDto, user);
+  }
+
+  @HttpPost(':id/vote')
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard)
+  @ApiOkResponse({ description: 'Upvote or downvote a Reddit-style post.' })
+  vote(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() voteDto: VoteDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.postsService.vote(id, voteDto, user);
+  }
+
+  @Delete(':id/vote')
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard)
+  @ApiOkResponse({ description: 'Remove the authenticated user vote from a Reddit-style post.' })
+  clearVote(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: AuthUser) {
+    return this.postsService.clearVote(id, user);
   }
 
   @Patch(':id/publish')

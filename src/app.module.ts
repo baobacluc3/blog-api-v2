@@ -6,7 +6,7 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { RedisCacheModule } from './cache/cache.module';
 import { RedisThrottlerStorageService } from './cache/redis-throttler-storage.service';
 import { AuthModule } from './auth/auth.module';
-import { CategoriesModule } from './categories/categories.module';
+import { CommunitiesModule } from './communities/communities.module';
 import { CommentsModule } from './comments/comments.module';
 import { databaseConfig } from './config/database.config';
 import { HealthModule } from './health/health.module';
@@ -39,7 +39,7 @@ import { UsersModule } from './users/users.module';
     AuthModule,
     UsersModule,
     PostsModule,
-    CategoriesModule,
+    CommunitiesModule,
     CommentsModule,
     HealthModule,
   ],

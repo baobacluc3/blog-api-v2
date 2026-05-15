@@ -27,8 +27,10 @@ async function bootstrap() {
   app.useGlobalInterceptors(new ClassSerializerInterceptor(app.get(Reflector)));
 
   const swaggerConfig = new DocumentBuilder()
-    .setTitle('Blog REST API')
-    .setDescription('Blog REST API built with NestJS, TypeORM, PostgreSQL, JWT, and Swagger.')
+    .setTitle('Reddit Clone REST API')
+    .setDescription(
+      'Reddit Clone REST API built with NestJS, TypeORM, PostgreSQL, JWT, and Swagger.',
+    )
     .setVersion('1.0')
     .addBearerAuth(
       {
