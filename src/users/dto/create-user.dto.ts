@@ -1,5 +1,13 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEmail, IsEnum, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import {
+  IsEmail,
+  IsEnum,
+  IsOptional,
+  IsString,
+  IsUrl,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 import { Role } from '../../common/enums/role.enum';
 
 export class CreateUserDto {
@@ -19,6 +27,18 @@ export class CreateUserDto {
   @MinLength(8)
   @MaxLength(128)
   password: string;
+
+  @ApiPropertyOptional({ example: 'Backend developer sharing NestJS notes.' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(300)
+  bio?: string;
+
+  @ApiPropertyOptional({ example: 'https://cdn.example.com/avatars/jane.png' })
+  @IsOptional()
+  @IsUrl({ require_protocol: true })
+  @MaxLength(500)
+  avatarUrl?: string;
 
   @ApiPropertyOptional({ enum: Role, default: Role.User })
   @IsOptional()

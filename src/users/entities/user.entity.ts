@@ -30,6 +30,15 @@ export class User {
   @Column({ type: 'enum', enum: Role, default: Role.User })
   role: Role;
 
+  @Column({ type: 'varchar', length: 300, nullable: true })
+  bio: string | null;
+
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  avatarUrl: string | null;
+
+  @Column({ default: true })
+  isActive: boolean;
+
   @OneToMany(() => Post, (post) => post.author)
   posts: Post[];
 

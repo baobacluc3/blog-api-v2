@@ -14,7 +14,7 @@ This project is designed to show more than basic CRUD:
 
 ## Features
 
-- User registration and login
+- User registration, login, and self-service profile management
 - JWT access tokens
 - Refresh tokens with token rotation
 - Refresh token hashing in PostgreSQL
@@ -22,10 +22,11 @@ This project is designed to show more than basic CRUD:
 - Password hashing with bcrypt
 - `admin` and `user` roles
 - Public read routes for published posts and categories
-- Protected post, comment, user, and category mutation routes
+- Protected post, comment, user profile, and category mutation routes
 - Author/admin authorization for post updates and deletes
 - Comment author/admin authorization for comment deletes
 - Post pagination, search, category/author/tag filters, sorting, and published filter
+- Admin user pagination, search, role/status filters, sorting, activation/deactivation, and self-delete safeguards
 - Post reading-time calculation, auto excerpts, tags, publish/unpublish workflow, public view counts, and soft deletes
 - Slug generation for posts and categories
 - Swagger API docs at `/api/docs`
@@ -37,7 +38,7 @@ This project is designed to show more than basic CRUD:
 - Production Dockerfile
 - Seed script with demo admin, author, categories, posts, and comment
 - GitHub Actions CI pipeline
-- Unit tests for shared utilities
+- Unit tests for shared utilities and service-level business rules
 
 ## Project structure
 
@@ -225,6 +226,9 @@ Public routes:
 
 Protected routes:
 
+- `GET /api/users/me`
+- `PATCH /api/users/me`
+- `PATCH /api/users/me/password`
 - `POST /api/posts`
 - `PATCH /api/posts/:id`
 - `DELETE /api/posts/:id`
@@ -236,6 +240,8 @@ Admin-only routes:
 - `GET /api/users`
 - `GET /api/users/:id`
 - `PATCH /api/users/:id`
+- `PATCH /api/users/:id/activate`
+- `PATCH /api/users/:id/deactivate`
 - `DELETE /api/users/:id`
 - `POST /api/categories`
 - `PATCH /api/categories/:id`
@@ -321,6 +327,41 @@ Logout revokes the current refresh token.
 curl -X POST http://localhost:3000/api/auth/logout \
   -H "Content-Type: application/json" \
   -d "{\"refreshToken\":\"$REFRESH_TOKEN\"}"
+```
+
+### Get and update my profile
+
+```bash
+curl http://localhost:3000/api/users/me \
+  -H "Authorization: Bearer $TOKEN"
+
+curl -X PATCH http://localhost:3000/api/users/me \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Jane Backend Dev",
+    "bio": "Junior backend developer focused on NestJS APIs.",
+    "avatarUrl": "https://cdn.example.com/avatars/jane.png"
+  }'
+```
+
+### Change my password
+
+```bash
+curl -X PATCH http://localhost:3000/api/users/me/password \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "currentPassword": "StrongPassword123!",
+    "newPassword": "NewStrongPassword123!"
+  }'
+```
+
+### List users, admin only
+
+```bash
+curl "http://localhost:3000/api/users?page=1&limit=10&search=jane&role=user&isActive=true&sortBy=createdAt&sortOrder=DESC" \
+  -H "Authorization: Bearer $TOKEN"
 ```
 
 ### Create category, admin only
@@ -449,7 +490,9 @@ This is useful for GitHub portfolio review because recruiters can see that the p
 - Only authors or admins can update/delete posts.
 - Only comment authors or admins can delete comments.
 - Category mutations are admin-only.
-- User management is admin-only.
+- Users can view/update their own profile and change passwords without touching role fields.
+- User management is admin-only, with pagination/search/filtering plus safeguards against admins deleting or deactivating themselves.
+- Deactivated accounts cannot log in.
 - Validation rejects unknown DTO fields using `forbidNonWhitelisted: true`.
 - Passwords are excluded from serialized responses using `class-transformer`.
 
@@ -471,6 +514,6 @@ npm run check       # lint + test + build
 Use these bullets in your CV, GitHub README summary, or LinkedIn project description:
 
 - Built a modular NestJS Blog REST API with JWT authentication, refresh token rotation, RBAC, TypeORM, PostgreSQL, Swagger, and DTO validation.
-- Implemented production-style authorization rules: admin-only management routes, author-only post edits, and comment ownership checks.
-- Added secure logout, hashed refresh token storage, token revocation, search, filtering, sorting, pagination metadata, unique slug generation, reading-time calculation, view counts, soft deletes, seed data, health checks, rate limiting, Docker, and CI.
+- Implemented production-style authorization rules: admin-only management routes, self-service user profile routes, author-only post edits, and comment ownership checks.
+- Added secure logout, hashed refresh token storage, token revocation, user activation/deactivation, search, filtering, sorting, pagination metadata, unique slug generation, reading-time calculation, view counts, soft deletes, seed data, health checks, rate limiting, Docker, and CI.
 - Designed the project with clean feature modules, reusable guards/decorators, service-level business rules, and documented API examples.
