@@ -202,7 +202,10 @@ export class AuthService {
   }
 
   private getRefreshTokenSecret(): string {
-    return this.configService.get<string>('JWT_REFRESH_SECRET') ?? this.configService.getOrThrow<string>('JWT_SECRET');
+    return (
+      this.configService.get<string>('JWT_REFRESH_SECRET') ??
+      this.configService.getOrThrow<string>('JWT_SECRET')
+    );
   }
 
   private parseExpirationToMilliseconds(value: string | number): number {
@@ -233,7 +236,8 @@ export class AuthService {
   }
 
   private sanitizeUser(user: User) {
-    const { password: _password, ...safeUser } = user;
+    const safeUser = { ...user };
+    delete (safeUser as Partial<User>).password;
     return safeUser;
   }
 }

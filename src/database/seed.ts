@@ -105,7 +105,8 @@ async function seed(): Promise<void> {
 
   const firstPost = await ensurePost({
     title: 'Building a Production-Ready Blog API with NestJS',
-    excerpt: 'A practical walkthrough of modular NestJS APIs, JWT auth, RBAC, DTO validation, and TypeORM.',
+    excerpt:
+      'A practical walkthrough of modular NestJS APIs, JWT auth, RBAC, DTO validation, and TypeORM.',
     content:
       'This demo post is created by the seed script. It shows pagination, search, filtering, slug URLs, category relations, author ownership, and comments.',
     coverImage: 'https://images.unsplash.com/photo-1499750310107-5fef28a66643',
