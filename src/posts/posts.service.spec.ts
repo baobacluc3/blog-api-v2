@@ -9,6 +9,7 @@ import { Role } from '../common/enums/role.enum';
 import { SortOrder } from '../common/enums/sort-order.enum';
 import { VoteValue } from '../common/enums/vote-value.enum';
 import { AuthUser } from '../common/interfaces/auth-user.interface';
+import { User } from '../users/entities/user.entity';
 import { PostSortBy } from './dto/post-sort-by.enum';
 import { PostVote } from './entities/post-vote.entity';
 import { Post } from './entities/post.entity';
@@ -321,6 +322,11 @@ describe('PostsService', () => {
 
     expect(postVotesRepository.delete).toHaveBeenCalledWith({ id: 99 });
     expect(postsRepository.increment).toHaveBeenCalledWith({ id: 1 }, 'score', -1);
+    expect(usersRepository.increment).toHaveBeenCalledWith(
+      { id: authorEntity.id },
+      'postKarma',
+      -1,
+    );
     expect(postsRepository.increment).toHaveBeenCalledWith({ id: 1 }, 'upvoteCount', -1);
     expect(result).toMatchObject({ score: 0, upvoteCount: 0, downvoteCount: 0, userVote: null });
   });
@@ -340,6 +346,11 @@ describe('PostsService', () => {
     const result = await service.vote(1, { value: VoteValue.Downvote }, user);
 
     expect(postsRepository.increment).toHaveBeenCalledWith({ id: 1 }, 'score', -2);
+    expect(usersRepository.increment).toHaveBeenCalledWith(
+      { id: authorEntity.id },
+      'postKarma',
+      -2,
+    );
     expect(postsRepository.increment).toHaveBeenCalledWith({ id: 1 }, 'upvoteCount', -1);
     expect(postsRepository.increment).toHaveBeenCalledWith({ id: 1 }, 'downvoteCount', 1);
     expect(result).toMatchObject({ score: -1, upvoteCount: 0, downvoteCount: 1, userVote: -1 });

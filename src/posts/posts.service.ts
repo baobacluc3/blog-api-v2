@@ -15,6 +15,7 @@ import { Role } from '../common/enums/role.enum';
 import { SortOrder } from '../common/enums/sort-order.enum';
 import { VoteValue } from '../common/enums/vote-value.enum';
 import { AuthUser } from '../common/interfaces/auth-user.interface';
+import { User } from '../users/entities/user.entity';
 import { slugify } from '../common/utils/slugify';
 import { CreateCommunityPostDto } from './dto/create-community-post.dto';
 import { CreatePostDto } from './dto/create-post.dto';
@@ -323,7 +324,10 @@ export class PostsService {
       );
     }
 
-    if (delta.score) await this.postsRepository.increment({ id }, 'score', delta.score);
+    if (delta.score) {
+      await this.postsRepository.increment({ id }, 'score', delta.score);
+      await this.usersRepository.increment({ id: post.author.id }, 'postKarma', delta.score);
+    }
     if (delta.upvotes) await this.postsRepository.increment({ id }, 'upvoteCount', delta.upvotes);
     if (delta.downvotes)
       await this.postsRepository.increment({ id }, 'downvoteCount', delta.downvotes);
