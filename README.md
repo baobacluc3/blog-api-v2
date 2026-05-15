@@ -1,6 +1,6 @@
-# Blog REST API
+# Reddit Clone REST API
 
-A production-oriented Blog REST API built with **NestJS**, **TypeScript**, **TypeORM**, **PostgreSQL**, **Redis caching**, **JWT authentication with refresh token rotation**, **bcrypt**, **DTO validation**, **RBAC**, **Swagger**, pagination, search, filtering, slug generation, health checks, seed data, Redis-backed rate limiting, Docker, and CI.
+A production-oriented Reddit clone REST API built with **NestJS**, **TypeScript**, **TypeORM**, **PostgreSQL**, **Redis caching**, **JWT authentication with refresh token rotation**, **bcrypt**, **DTO validation**, **RBAC**, **Swagger**, Reddit-style link/text submissions, upvotes/downvotes, hot/top/new sorting, comment threads, pagination, search, filtering, slug generation, health checks, seed data, Redis-backed rate limiting, Docker, and CI.
 
 ## Recruiter-ready highlights
 
@@ -8,7 +8,7 @@ This project is designed to show more than basic CRUD:
 
 - **Production API structure**: clean modular NestJS architecture with feature modules, DTOs, entities, services, controllers, guards, decorators, and reusable common utilities.
 - **Security fundamentals**: JWT access tokens, refresh token rotation, hashed refresh token storage, logout/revocation, bcrypt password hashing, role-based access control, ownership authorization, security headers with Helmet, and global rate limiting.
-- **Real API behavior**: pagination metadata, post search, category/author/tag filters, published/draft visibility rules, generated unique slugs, reading-time calculation, view counting, soft deletes, and protected admin routes.
+- **Real API behavior**: pagination metadata, post search, community/author/tag filters, published/draft visibility rules, generated unique slugs, reading-time calculation, view counting, soft deletes, and protected admin routes.
 - **Operational readiness**: `/api/health` database health check, Redis cache/rate-limit support, Dockerfile, Docker Compose for PostgreSQL and Redis, seed script, GitHub Actions CI, lint/test/build workflow.
 - **Developer experience**: Swagger docs, example cURL requests, environment template, and automated seed data for quick demos.
 
@@ -21,14 +21,15 @@ This project is designed to show more than basic CRUD:
 - Logout with refresh token revocation
 - Password hashing with bcrypt
 - `admin` and `user` roles
-- Public read routes for published posts and categories
-- Protected post, comment, user, and category mutation routes
+- Public read routes for published Reddit-style posts and communities/subreddits
+- Protected post, comment, user, and community mutation routes
 - Author/admin authorization for post updates and deletes
 - Comment author/admin authorization for comment deletes
-- Redis-cached public post list, category list, and popular posts
-- Post pagination, search, category/author/tag filters, sorting, and published filter
-- Post reading-time calculation, auto excerpts, tags, publish/unpublish workflow, public view counts, and soft deletes
-- Slug generation for posts and categories
+- Redis-cached public feeds, community/subreddit list, and popular posts
+- Reddit-style post pagination, search, community/subreddit, author, tag filters, and new/top/hot sorting
+- Upvote/downvote endpoints for posts and comments with score, upvote count, and downvote count tracking
+- Link-post metadata with URL/domain, flair, NSFW flag, text content, publish/unpublish workflow, public view counts, and soft deletes
+- Slug generation for posts and communities
 - Swagger API docs at `/api/docs`
 - Health check endpoint at `/api/health`
 - Global validation pipe with DTO whitelisting
@@ -36,7 +37,7 @@ This project is designed to show more than basic CRUD:
 - Redis-backed rate limiting with local in-memory fallback when `REDIS_URL` is not configured
 - PostgreSQL Docker Compose setup
 - Production Dockerfile
-- Seed script with demo admin, author, categories, posts, and comment
+- Seed script with demo admin, author, communities, posts, and comment
 - GitHub Actions CI pipeline
 - Unit tests for shared utilities
 
@@ -51,12 +52,12 @@ src/
     auth.controller.ts
     auth.module.ts
     auth.service.ts
-  categories/
+  communities/
     dto/
     entities/
-    categories.controller.ts
-    categories.module.ts
-    categories.service.ts
+    communities.controller.ts
+    communities.module.ts
+    communities.service.ts
   comments/
     dto/
     entities/
@@ -125,7 +126,7 @@ DB_HOST=localhost
 DB_PORT=5432
 DB_USERNAME=postgres
 DB_PASSWORD=postgres
-DB_NAME=blog_api
+DB_NAME=reddit_clone_api
 
 JWT_SECRET=replace-with-a-long-random-secret
 JWT_EXPIRES_IN=15m
@@ -136,9 +137,9 @@ THROTTLE_TTL=60000
 THROTTLE_LIMIT=100
 
 REDIS_URL=redis://localhost:6379
-CACHE_KEY_PREFIX=blog-api
+CACHE_KEY_PREFIX=reddit-clone-api
 CACHE_PUBLISHED_POSTS_TTL_SECONDS=60
-CACHE_CATEGORIES_TTL_SECONDS=300
+CACHE_COMMUNITIES_TTL_SECONDS=300
 CACHE_POPULAR_POSTS_TTL_SECONDS=120
 REDIS_COMMAND_TIMEOUT_MS=1000
 
@@ -205,6 +206,26 @@ Health check:
 curl http://localhost:3000/api/health
 ```
 
+## Reddit-style endpoints
+
+Authenticated users create Reddit-style text or link submissions inside a community/subreddit with `POST /api/communities/:communityId/posts` or the Reddit-like `POST /api/r/:communitySlug/posts`. The legacy `POST /api/posts` route still accepts `communityId` for clients that prefer a flat API. Include optional `url`, `flair`, and `nsfw` fields for Reddit-like link posts.
+
+Voting uses idempotent per-user vote records:
+
+```bash
+curl -X POST http://localhost:3000/api/posts/1/vote \
+  -H "Authorization: Bearer <access-token>" \
+  -H "Content-Type: application/json" \
+  -d '{"value": 1}'
+
+curl -X POST http://localhost:3000/api/comments/1/vote \
+  -H "Authorization: Bearer <access-token>" \
+  -H "Content-Type: application/json" \
+  -d '{"value": -1}'
+```
+
+Feeds support Reddit-like sorts through `sortBy=createdAt`, `sortBy=score`, or `sortBy=hot`. Comment threads support `sort=newest`, `sort=oldest`, or `sort=top`.
+
 ## Demo accounts after seeding
 
 Admin:
@@ -231,15 +252,21 @@ Public routes:
 - `POST /api/auth/logout`
 - `GET /api/health`
 - `GET /api/posts`
+- `GET /api/communities/:communityId/posts` (`/api/subreddits/:communityId/posts` alias)
+- `GET /api/r/:communitySlug/posts`
 - `GET /api/posts/:id`
 - `GET /api/posts/slug/:slug`
-- `GET /api/categories`
-- `GET /api/categories/:id`
+- `GET /api/communities` (`/api/subreddits` alias)
+- `GET /api/communities/:id` (`/api/subreddits/:id` alias)
 - `GET /api/posts/:postId/comments`
 
 Protected routes:
 
 - `POST /api/posts`
+- `POST /api/communities/:communityId/posts` (`/api/subreddits/:communityId/posts` alias)
+- `POST /api/r/:communitySlug/posts`
+- `POST /api/posts/:id/vote`
+- `POST /api/comments/:id/vote`
 - `PATCH /api/posts/:id`
 - `DELETE /api/posts/:id`
 - `POST /api/posts/:postId/comments`
@@ -251,9 +278,9 @@ Admin-only routes:
 - `GET /api/users/:id`
 - `PATCH /api/users/:id`
 - `DELETE /api/users/:id`
-- `POST /api/categories`
-- `PATCH /api/categories/:id`
-- `DELETE /api/categories/:id`
+- `POST /api/communities` (`/api/subreddits` alias)
+- `PATCH /api/communities/:id` (`/api/subreddits/:id` alias)
+- `DELETE /api/communities/:id` (`/api/subreddits/:id` alias)
 
 Public registration always creates `role=user` even if a role is submitted. Use the seed script to create an admin demo account, or promote a user directly in PostgreSQL:
 
@@ -337,21 +364,24 @@ curl -X POST http://localhost:3000/api/auth/logout \
   -d "{\"refreshToken\":\"$REFRESH_TOKEN\"}"
 ```
 
-### Create category, admin only
+### Create community/subreddit, admin only
 
 ```bash
-curl -X POST http://localhost:3000/api/categories \
+curl -X POST http://localhost:3000/api/communities \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "name": "NestJS"
+    "name": "nestjs",
+    "title": "r/nestjs",
+    "description": "A subreddit-style community for NestJS discussions.",
+    "nsfw": false
   }'
 ```
 
-### Create post
+### Create a post inside a community/subreddit
 
 ```bash
-curl -X POST http://localhost:3000/api/posts \
+curl -X POST http://localhost:3000/api/r/nestjs/posts \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -359,18 +389,25 @@ curl -X POST http://localhost:3000/api/posts \
     "content": "Long-form article content goes here.",
     "excerpt": "A practical NestJS API guide.",
     "coverImage": "https://example.com/cover.jpg",
+    "url": "https://example.com/nestjs-api-guide",
+    "flair": "Discussion",
+    "nsfw": false,
     "tags": ["nestjs", "backend"],
-    "published": true,
-    "categoryId": 1
+    "published": true
   }'
 ```
+
+You can also create by numeric community id with `POST /api/communities/1/posts` or use the flat compatibility route `POST /api/posts` with `communityId` in the body.
 
 ### List posts with pagination, search, and filters
 
 Public published-list responses are cached in Redis when `REDIS_URL` is configured.
 
 ```bash
-curl "http://localhost:3000/api/posts?page=1&limit=10&search=nestjs&categorySlug=nestjs&tag=backend&sortBy=viewCount&sortOrder=DESC&published=true"
+curl "http://localhost:3000/api/r/nestjs/posts?page=1&limit=10&search=api&tag=backend&sortBy=hot&published=true"
+
+# Global/home feed remains available too:
+curl "http://localhost:3000/api/posts?page=1&limit=10&communitySlug=nestjs&tag=backend&sortBy=hot&published=true"
 ```
 
 ### List popular posts
@@ -433,13 +470,13 @@ docker compose up -d
 Build the production API image:
 
 ```bash
-docker build -t blog-rest-api .
+docker build -t reddit-clone-api .
 ```
 
 Run the API container against a reachable PostgreSQL instance:
 
 ```bash
-docker run --env-file .env -p 3000:3000 blog-rest-api
+docker run --env-file .env -p 3000:3000 reddit-clone-api
 ```
 
 
@@ -449,14 +486,14 @@ Redis is optional in single-instance development, but recommended for production
 
 Cached data:
 
-- **Published post lists**: unauthenticated `GET /api/posts` requests where `published` is omitted or `published=true`. The cache key includes pagination, search, category, author, tag, and sort query values. Default TTL: `CACHE_PUBLISHED_POSTS_TTL_SECONDS=60`.
-- **Category list**: `GET /api/categories`. Default TTL: `CACHE_CATEGORIES_TTL_SECONDS=300`.
+- **Published post lists**: unauthenticated home-feed and community-feed requests where `published` is omitted or `published=true`. The cache key includes pagination, search, community, author, tag, and sort query values. Default TTL: `CACHE_PUBLISHED_POSTS_TTL_SECONDS=60`.
+- **Community list**: `GET /api/communities`. Default TTL: `CACHE_COMMUNITIES_TTL_SECONDS=300`.
 - **Popular posts**: `GET /api/posts/popular?limit=...`. The cache key includes the normalized limit. Default TTL: `CACHE_POPULAR_POSTS_TTL_SECONDS=120`.
 
 Invalidation rules:
 
 - Creating a post as already published, publishing a draft, unpublishing, updating, or soft-deleting a post invalidates public post-list and popular-post caches.
-- Creating, updating, or deleting a category invalidates the category-list cache.
+- Creating, updating, or deleting a community invalidates the community-list cache.
 - Individual post detail reads are intentionally not cached because they increment public `viewCount`. The popular-post cache may lag new views until its short TTL expires or a post mutation invalidates it.
 
 Rate limiting:
@@ -491,12 +528,12 @@ This is useful for GitHub portfolio review because recruiters can see that the p
 - Public users can only see published posts.
 - Reading time and excerpt are generated from content when a post is created or content is updated.
 - Published posts receive a `publishedAt` timestamp, public reads increment `viewCount`, and deletes are soft deletes through `deletedAt`.
-- Redis caches public post lists, category lists, and popular posts, with mutation-driven invalidation for public post caches and category-list caches.
+- Redis caches public post lists, community lists, and popular posts, with mutation-driven invalidation for public post caches and community-list caches.
 - Authenticated authors can see their own unpublished posts.
 - Admin users can see all posts.
 - Only authors or admins can update/delete posts.
 - Only comment authors or admins can delete comments.
-- Category mutations are admin-only.
+- Community mutations are admin-only.
 - User management is admin-only.
 - Validation rejects unknown DTO fields using `forbidNonWhitelisted: true`.
 - Passwords are excluded from serialized responses using `class-transformer`.
@@ -510,7 +547,7 @@ npm run start:prod  # run compiled app
 npm run lint        # lint source files
 npm run test        # run unit tests
 npm run test:cov    # run unit tests with coverage
-npm run seed        # seed demo users, categories, posts, comments
+npm run seed        # seed demo users, communities, posts, comments
 npm run check       # lint + test + build
 ```
 
@@ -518,7 +555,7 @@ npm run check       # lint + test + build
 
 Use these bullets in your CV, GitHub README summary, or LinkedIn project description:
 
-- Built a modular NestJS Blog REST API with JWT authentication, refresh token rotation, RBAC, TypeORM, PostgreSQL, Swagger, and DTO validation.
+- Built a modular NestJS Reddit clone REST API with JWT authentication, refresh token rotation, RBAC, TypeORM, PostgreSQL, Swagger, and DTO validation.
 - Implemented production-style authorization rules: admin-only management routes, author-only post edits, and comment ownership checks.
 - Added secure logout, hashed refresh token storage, token revocation, Redis caching, Redis-backed rate limiting, search, filtering, sorting, pagination metadata, unique slug generation, reading-time calculation, view counts, soft deletes, seed data, health checks, Docker, and CI.
 - Designed the project with clean feature modules, reusable guards/decorators, service-level business rules, and documented API examples.

@@ -3,10 +3,12 @@ import * as bcrypt from 'bcrypt';
 import * as dotenv from 'dotenv';
 import { RefreshToken } from '../auth/entities/refresh-token.entity';
 import { DataSource } from 'typeorm';
-import { Category } from '../categories/entities/category.entity';
+import { Community } from '../communities/entities/community.entity';
+import { CommentVote } from '../comments/entities/comment-vote.entity';
 import { Comment } from '../comments/entities/comment.entity';
 import { Role } from '../common/enums/role.enum';
 import { slugify } from '../common/utils/slugify';
+import { PostVote } from '../posts/entities/post-vote.entity';
 import { Post } from '../posts/entities/post.entity';
 import { User } from '../users/entities/user.entity';
 
@@ -22,7 +24,7 @@ const dataSource = new DataSource({
   username: process.env.DB_USERNAME,
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
-  entities: [User, Post, Category, Comment, RefreshToken],
+  entities: [User, Post, PostVote, Community, Comment, CommentVote, RefreshToken],
   synchronize: process.env.NODE_ENV !== 'production',
 });
 
@@ -50,16 +52,31 @@ async function ensureUser(input: {
   );
 }
 
-async function ensureCategory(name: string): Promise<Category> {
-  const categoriesRepository = dataSource.getRepository(Category);
-  const slug = slugify(name);
-  const existing = await categoriesRepository.findOne({ where: { slug } });
+async function ensureCommunity(input: {
+  name: string;
+  title: string;
+  description: string;
+  nsfw?: boolean;
+}): Promise<Community> {
+  const communitiesRepository = dataSource.getRepository(Community);
+  const slug = slugify(input.name);
+  const existing = await communitiesRepository.findOne({ where: { slug } });
 
   if (existing) {
     return existing;
   }
 
-  return categoriesRepository.save(categoriesRepository.create({ name, slug }));
+  return communitiesRepository.save(
+    communitiesRepository.create({
+      name: input.name,
+      slug,
+      title: input.title,
+      description: input.description,
+      iconImage: null,
+      bannerImage: null,
+      nsfw: input.nsfw ?? false,
+    }),
+  );
 }
 
 async function ensurePost(input: {
@@ -70,7 +87,7 @@ async function ensurePost(input: {
   published: boolean;
   tags: string[];
   author: User;
-  category: Category;
+  community: Community;
 }): Promise<Post> {
   const postsRepository = dataSource.getRepository(Post);
   const slug = slugify(input.title);
@@ -107,20 +124,28 @@ async function seed(): Promise<void> {
     role: Role.User,
   });
 
-  const nestCategory = await ensureCategory('NestJS');
-  const architectureCategory = await ensureCategory('Backend Architecture');
+  const nestCommunity = await ensureCommunity({
+    name: 'nestjs',
+    title: 'r/nestjs',
+    description: 'A subreddit-style community for NestJS API discussions.',
+  });
+  const architectureCommunity = await ensureCommunity({
+    name: 'backend_architecture',
+    title: 'r/backend_architecture',
+    description: 'A community for backend architecture, authorization, and API design.',
+  });
 
   const firstPost = await ensurePost({
-    title: 'Building a Production-Ready Blog API with NestJS',
+    title: 'Building a Production-Ready Reddit Clone API with NestJS',
     excerpt:
       'A practical walkthrough of modular NestJS APIs, JWT auth, RBAC, DTO validation, and TypeORM.',
     content:
-      'This demo post is created by the seed script. It shows pagination, search, filtering, slug URLs, category relations, author ownership, and comments.',
+      'This demo post is created by the seed script. It shows pagination, search, filtering, slug URLs, community relations, author ownership, and comments.',
     coverImage: 'https://images.unsplash.com/photo-1499750310107-5fef28a66643',
     published: true,
     tags: ['nestjs', 'backend', 'portfolio'],
     author,
-    category: nestCategory,
+    community: nestCommunity,
   });
 
   await ensurePost({
@@ -132,7 +157,7 @@ async function seed(): Promise<void> {
     published: true,
     tags: ['authorization', 'architecture'],
     author: admin,
-    category: architectureCategory,
+    community: architectureCommunity,
   });
 
   const commentsRepository = dataSource.getRepository(Comment);
