@@ -106,13 +106,17 @@ export class PostsService {
     return this.findAll({ ...query, communitySlug: community.slug }, requester);
   }
 
-  async findAll(query: PostsQueryDto, requester?: AuthUser | null): Promise<PaginatedPosts> {
+  async findAll(
+    query: PostsQueryDto,
+    requester?: AuthUser | null,
+    communityIds?: number[],
+  ): Promise<PaginatedPosts> {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
 
     const fetchPosts = async () => {
-      const qb = this.buildPostsQuery(query, requester).skip(skip).take(limit);
+      const qb = this.buildPostsQuery(query, requester, communityIds).skip(skip).take(limit);
       const [data, total] = await qb.getManyAndCount();
       await this.applyRequesterVotes(data, requester);
 
@@ -122,7 +126,7 @@ export class PostsService {
       };
     };
 
-    if (!requester && query.published !== false) {
+    if (!requester && !communityIds?.length && query.published !== false) {
       return this.cacheService.getOrSet(
         this.cacheService.createKey(`${getCacheKeyPrefix()}:posts:published:list`, {
           ...query,
@@ -139,6 +143,21 @@ export class PostsService {
 
   async findMine(query: PostsQueryDto, requester: AuthUser): Promise<PaginatedPosts> {
     return this.findAll({ ...query, authorId: requester.id }, requester);
+  }
+
+  async findHomeFeed(query: PostsQueryDto, requester: AuthUser): Promise<PaginatedPosts> {
+    const joinedCommunityIds = await this.communitiesService.findJoinedCommunityIds(requester.id);
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 10;
+
+    if (!joinedCommunityIds.length) {
+      return {
+        data: [],
+        meta: new PaginationMetaDto(page, limit, 0),
+      };
+    }
+
+    return this.findAll({ ...query, published: true }, requester, joinedCommunityIds);
   }
 
   async findPopular(limit = 5): Promise<Post[]> {
@@ -313,6 +332,7 @@ export class PostsService {
   private buildPostsQuery(
     query: PostsQueryDto,
     requester?: AuthUser | null,
+    communityIds?: number[],
   ): SelectQueryBuilder<Post> {
     const qb = this.postsRepository
       .createQueryBuilder('post')
@@ -322,6 +342,7 @@ export class PostsService {
 
     this.applySearchFilter(qb, query.search);
     this.applyCommunityFilter(qb, query.communityId, query.communitySlug);
+    this.applyCommunityIdsFilter(qb, communityIds);
     this.applyAuthorFilter(qb, query.authorId);
     this.applyTagFilter(qb, query.tag);
     this.applyVisibilityFilter(qb, query.published, requester);
@@ -357,6 +378,12 @@ export class PostsService {
 
     if (communitySlug) {
       qb.andWhere('community.slug = :communitySlug', { communitySlug });
+    }
+  }
+
+  private applyCommunityIdsFilter(qb: SelectQueryBuilder<Post>, communityIds?: number[]): void {
+    if (communityIds?.length) {
+      qb.andWhere('community.id IN (:...communityIds)', { communityIds });
     }
   }
 
