@@ -12,6 +12,7 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiCreatedResponse, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { VoteDto } from '../common/dto/vote.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { OptionalJwtAuthGuard } from '../common/guards/optional-jwt-auth.guard';
 import { AuthUser } from '../common/interfaces/auth-user.interface';
@@ -60,6 +61,18 @@ export class CommentsController {
     @CurrentUser() user: AuthUser,
   ) {
     return this.commentsService.reply(commentId, user, createCommentDto);
+  }
+
+  @Post('comments/:id/vote')
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard)
+  @ApiOkResponse({ description: 'Upvote or downvote a Reddit-style comment.' })
+  vote(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() voteDto: VoteDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.commentsService.vote(id, voteDto, user);
   }
 
   @Patch('comments/:id')

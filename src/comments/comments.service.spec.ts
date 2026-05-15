@@ -7,6 +7,7 @@ import { AuthUser } from '../common/interfaces/auth-user.interface';
 import { Post } from '../posts/entities/post.entity';
 import { PostsService } from '../posts/posts.service';
 import { CommentsService } from './comments.service';
+import { CommentVote } from './entities/comment-vote.entity';
 import { Comment } from './entities/comment.entity';
 
 type MockRepository<T extends object = object> = Partial<Record<keyof Repository<T>, jest.Mock>>;
@@ -31,11 +32,13 @@ const createMockRepository = <T extends object>(): MockRepository<T> => ({
 describe('CommentsService', () => {
   let service: CommentsService;
   let commentsRepository: MockRepository<Comment>;
+  let commentVotesRepository: MockRepository<CommentVote>;
   let postsRepository: MockRepository<Post>;
   let postsService: { findOne: jest.Mock };
 
   beforeEach(async () => {
     commentsRepository = createMockRepository<Comment>();
+    commentVotesRepository = createMockRepository<CommentVote>();
     postsRepository = createMockRepository<Post>();
     postsService = { findOne: jest.fn() };
 
@@ -43,6 +46,7 @@ describe('CommentsService', () => {
       providers: [
         CommentsService,
         { provide: getRepositoryToken(Comment), useValue: commentsRepository },
+        { provide: getRepositoryToken(CommentVote), useValue: commentVotesRepository },
         { provide: getRepositoryToken(Post), useValue: postsRepository },
         { provide: PostsService, useValue: postsService },
       ],

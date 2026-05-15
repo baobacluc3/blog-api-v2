@@ -18,8 +18,8 @@ export class GetCommentsQueryDto {
   @Max(50)
   limit?: number = 10;
 
-  @ApiPropertyOptional({ enum: ['newest', 'oldest'], default: 'newest' })
+  @ApiPropertyOptional({ enum: ['newest', 'oldest', 'top'], default: 'newest' })
   @IsOptional()
-  @IsIn(['newest', 'oldest'])
-  sort?: 'newest' | 'oldest' = 'newest';
+  @IsIn(['newest', 'oldest', 'top'])
+  sort?: 'newest' | 'oldest' | 'top' = 'newest';
 }

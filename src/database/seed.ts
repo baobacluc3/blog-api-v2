@@ -4,9 +4,11 @@ import * as dotenv from 'dotenv';
 import { RefreshToken } from '../auth/entities/refresh-token.entity';
 import { DataSource } from 'typeorm';
 import { Category } from '../categories/entities/category.entity';
+import { CommentVote } from '../comments/entities/comment-vote.entity';
 import { Comment } from '../comments/entities/comment.entity';
 import { Role } from '../common/enums/role.enum';
 import { slugify } from '../common/utils/slugify';
+import { PostVote } from '../posts/entities/post-vote.entity';
 import { Post } from '../posts/entities/post.entity';
 import { User } from '../users/entities/user.entity';
 
@@ -22,7 +24,7 @@ const dataSource = new DataSource({
   username: process.env.DB_USERNAME,
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
-  entities: [User, Post, Category, Comment, RefreshToken],
+  entities: [User, Post, PostVote, Category, Comment, CommentVote, RefreshToken],
   synchronize: process.env.NODE_ENV !== 'production',
 });
 
