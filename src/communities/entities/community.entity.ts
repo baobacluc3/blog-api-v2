@@ -7,6 +7,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { Post } from '../../posts/entities/post.entity';
+import { CommunityMembership } from './community-membership.entity';
 
 @Entity('communities')
 export class Community {
@@ -39,6 +40,11 @@ export class Community {
 
   @OneToMany(() => Post, (post) => post.community)
   posts: Post[];
+
+  @OneToMany(() => CommunityMembership, (membership) => membership.community)
+  memberships: CommunityMembership[];
+
+  isMember?: boolean;
 
   @CreateDateColumn()
   createdAt: Date;

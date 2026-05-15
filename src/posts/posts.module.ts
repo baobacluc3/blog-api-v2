@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { RedisCacheModule } from '../cache/cache.module';
 import { CommunitiesModule } from '../communities/communities.module';
+import { CommunityMembership } from '../communities/entities/community-membership.entity';
 import { PostVote } from './entities/post-vote.entity';
 import { Post } from './entities/post.entity';
 import { CommunityPostsController } from './community-posts.controller';
@@ -9,7 +10,11 @@ import { PostsController } from './posts.controller';
 import { PostsService } from './posts.service';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Post, PostVote]), CommunitiesModule, RedisCacheModule],
+  imports: [
+    TypeOrmModule.forFeature([Post, PostVote, CommunityMembership]),
+    CommunitiesModule,
+    RedisCacheModule,
+  ],
   controllers: [PostsController, CommunityPostsController],
   providers: [PostsService],
   exports: [PostsService],

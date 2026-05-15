@@ -8,8 +8,10 @@ import {
   getCacheTtlSeconds,
 } from '../cache/redis-cache.constants';
 import { slugify } from '../common/utils/slugify';
+import { AuthUser } from '../common/interfaces/auth-user.interface';
 import { CreateCommunityDto } from './dto/create-community.dto';
 import { UpdateCommunityDto } from './dto/update-community.dto';
+import { CommunityMembership } from './entities/community-membership.entity';
 import { Community } from './entities/community.entity';
 
 @Injectable()
@@ -17,6 +19,8 @@ export class CommunitiesService {
   constructor(
     @InjectRepository(Community)
     private readonly communitiesRepository: Repository<Community>,
+    @InjectRepository(CommunityMembership)
+    private readonly membershipsRepository: Repository<CommunityMembership>,
     private readonly cacheService: CacheService,
   ) {}
 
@@ -48,6 +52,60 @@ export class CommunitiesService {
           order: { name: 'ASC' },
         }),
     );
+  }
+
+  async findMyMemberships(requester: AuthUser): Promise<Community[]> {
+    const memberships = await this.membershipsRepository.find({
+      where: { user: { id: requester.id } },
+      relations: { community: true },
+      order: { createdAt: 'DESC' },
+    });
+
+    return memberships.map((membership) => ({
+      ...membership.community,
+      isMember: true,
+    }));
+  }
+
+  async join(id: number, requester: AuthUser): Promise<Community> {
+    const community = await this.findById(id);
+    const existingMembership = await this.membershipsRepository.findOne({
+      where: { community: { id }, user: { id: requester.id } },
+    });
+
+    if (existingMembership) {
+      return { ...community, isMember: true };
+    }
+
+    await this.membershipsRepository.save(
+      this.membershipsRepository.create({
+        community: { id },
+        user: { id: requester.id },
+      }),
+    );
+    await this.communitiesRepository.increment({ id }, 'memberCount', 1);
+    await this.invalidateCommunityListCache();
+
+    const updatedCommunity = await this.findById(id);
+    return { ...updatedCommunity, isMember: true };
+  }
+
+  async leave(id: number, requester: AuthUser): Promise<Community> {
+    const community = await this.findById(id);
+    const existingMembership = await this.membershipsRepository.findOne({
+      where: { community: { id }, user: { id: requester.id } },
+    });
+
+    if (!existingMembership) {
+      return { ...community, isMember: false };
+    }
+
+    await this.membershipsRepository.delete({ id: existingMembership.id });
+    await this.communitiesRepository.decrement({ id }, 'memberCount', 1);
+    await this.invalidateCommunityListCache();
+
+    const updatedCommunity = await this.findById(id);
+    return { ...updatedCommunity, isMember: false };
   }
 
   async findOne(id: number): Promise<Community> {
