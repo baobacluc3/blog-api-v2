@@ -23,6 +23,7 @@ import { PostSortBy } from './dto/post-sort-by.enum';
 import { PostsQueryDto } from './dto/posts-query.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
 import { PostVote } from './entities/post-vote.entity';
+import { SavedPost } from './entities/saved-post.entity';
 import { Post } from './entities/post.entity';
 
 export interface PaginatedPosts {
@@ -39,6 +40,10 @@ export class PostsService {
     private readonly postsRepository: Repository<Post>,
     @InjectRepository(PostVote)
     private readonly postVotesRepository: Repository<PostVote>,
+    @InjectRepository(SavedPost)
+    private readonly savedPostsRepository: Repository<SavedPost>,
+    @InjectRepository(User)
+    private readonly usersRepository: Repository<User>,
     @InjectRepository(CommunityMembership)
     private readonly communityMembershipsRepository: Repository<CommunityMembership>,
     private readonly communitiesService: CommunitiesService,
@@ -119,6 +124,7 @@ export class PostsService {
       const qb = this.buildPostsQuery(query, requester).skip(skip).take(limit);
       const [data, total] = await qb.getManyAndCount();
       await this.applyRequesterVotes(data, requester);
+      await this.applyRequesterSavedPosts(data, requester);
 
       return {
         data,
@@ -164,6 +170,7 @@ export class PostsService {
       .take(limit);
     const [data, total] = await qb.getManyAndCount();
     await this.applyRequesterVotes(data, requester);
+    await this.applyRequesterSavedPosts(data, requester);
 
     return {
       data,
@@ -202,6 +209,7 @@ export class PostsService {
     const post = await this.findPostForRead({ id }, requester);
     await this.incrementViewCount(post, requester);
     await this.applyRequesterVote(post, requester);
+    await this.applyRequesterSavedPost(post, requester);
     return post;
   }
 
@@ -209,6 +217,61 @@ export class PostsService {
     const post = await this.findPostForRead({ slug }, requester);
     await this.incrementViewCount(post, requester);
     await this.applyRequesterVote(post, requester);
+    await this.applyRequesterSavedPost(post, requester);
+    return post;
+  }
+
+  async findSaved(query: PostsQueryDto, requester: AuthUser): Promise<PaginatedPosts> {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 10;
+    const skip = (page - 1) * limit;
+
+    const qb = this.buildPostsQuery({ ...query, published: undefined }, requester)
+      .innerJoin('post.savedBy', 'savedPost', 'savedPost.userId = :requesterId', {
+        requesterId: requester.id,
+      })
+      .orderBy('savedPost.createdAt', SortOrder.Desc)
+      .addOrderBy('post.id', SortOrder.Desc)
+      .skip(skip)
+      .take(limit);
+
+    const [data, total] = await qb.getManyAndCount();
+    await this.applyRequesterVotes(data, requester);
+    data.forEach((post) => {
+      post.userSaved = true;
+    });
+
+    return {
+      data,
+      meta: new PaginationMetaDto(page, limit, total),
+    };
+  }
+
+  async savePost(id: number, requester: AuthUser): Promise<Post> {
+    const post = await this.findPostForRead({ id }, requester);
+    const existingSavedPost = await this.savedPostsRepository.findOne({
+      where: { post: { id }, user: { id: requester.id } },
+    });
+
+    if (!existingSavedPost) {
+      await this.savedPostsRepository.save(
+        this.savedPostsRepository.create({
+          post: { id },
+          user: { id: requester.id },
+        }),
+      );
+    }
+
+    await this.applyRequesterVote(post, requester);
+    post.userSaved = true;
+    return post;
+  }
+
+  async unsavePost(id: number, requester: AuthUser): Promise<Post> {
+    const post = await this.findPostForRead({ id }, requester);
+    await this.savedPostsRepository.delete({ post: { id }, user: { id: requester.id } });
+    await this.applyRequesterVote(post, requester);
+    post.userSaved = false;
     return post;
   }
 
@@ -506,6 +569,44 @@ export class PostsService {
 
     posts.forEach((post) => {
       post.userVote = votesByPostId.get(post.id) ?? null;
+    });
+  }
+
+  private async applyRequesterSavedPost(post: Post, requester?: AuthUser | null): Promise<void> {
+    if (!requester) {
+      post.userSaved = false;
+      return;
+    }
+
+    const savedPost = await this.savedPostsRepository.findOne({
+      where: { post: { id: post.id }, user: { id: requester.id } },
+    });
+    post.userSaved = Boolean(savedPost);
+  }
+
+  private async applyRequesterSavedPosts(
+    posts: Post[],
+    requester?: AuthUser | null,
+  ): Promise<void> {
+    if (!posts.length) {
+      return;
+    }
+
+    if (!requester) {
+      posts.forEach((post) => {
+        post.userSaved = false;
+      });
+      return;
+    }
+
+    const savedPosts = await this.savedPostsRepository.find({
+      where: { post: { id: In(posts.map((post) => post.id)) }, user: { id: requester.id } },
+      relations: { post: true },
+    });
+    const savedPostIds = new Set(savedPosts.map((savedPost) => savedPost.post.id));
+
+    posts.forEach((post) => {
+      post.userSaved = savedPostIds.has(post.id);
     });
   }
 

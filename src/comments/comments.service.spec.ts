@@ -10,6 +10,7 @@ import { PostsService } from '../posts/posts.service';
 import { User } from '../users/entities/user.entity';
 import { CommentsService } from './comments.service';
 import { CommentVote } from './entities/comment-vote.entity';
+import { SavedComment } from './entities/saved-comment.entity';
 import { Comment } from './entities/comment.entity';
 
 type MockRepository<T extends object = object> = Partial<Record<keyof Repository<T>, jest.Mock>>;
@@ -38,6 +39,7 @@ describe('CommentsService', () => {
   let service: CommentsService;
   let commentsRepository: MockRepository<Comment>;
   let commentVotesRepository: MockRepository<CommentVote>;
+  let savedCommentsRepository: MockRepository<SavedComment>;
   let usersRepository: MockRepository<User>;
   let postsRepository: MockRepository<Post>;
   let postsService: { findOne: jest.Mock };
@@ -45,6 +47,7 @@ describe('CommentsService', () => {
   beforeEach(async () => {
     commentsRepository = createMockRepository<Comment>();
     commentVotesRepository = createMockRepository<CommentVote>();
+    savedCommentsRepository = createMockRepository<SavedComment>();
     usersRepository = createMockRepository<User>();
     postsRepository = createMockRepository<Post>();
     postsService = { findOne: jest.fn() };
@@ -54,6 +57,7 @@ describe('CommentsService', () => {
         CommentsService,
         { provide: getRepositoryToken(Comment), useValue: commentsRepository },
         { provide: getRepositoryToken(CommentVote), useValue: commentVotesRepository },
+        { provide: getRepositoryToken(SavedComment), useValue: savedCommentsRepository },
         { provide: getRepositoryToken(User), useValue: usersRepository },
         { provide: getRepositoryToken(Post), useValue: postsRepository },
         { provide: PostsService, useValue: postsService },
@@ -84,6 +88,7 @@ describe('CommentsService', () => {
     };
     const qb = {
       leftJoinAndSelect: jest.fn().mockReturnThis(),
+      innerJoin: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
       andWhere: jest.fn().mockReturnThis(),
       orderBy: jest.fn().mockReturnThis(),

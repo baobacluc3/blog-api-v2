@@ -18,6 +18,7 @@ import { CreateCommentDto } from './dto/create-comment.dto';
 import { GetCommentsQueryDto } from './dto/get-comments-query.dto';
 import { UpdateCommentDto } from './dto/update-comment.dto';
 import { CommentVote } from './entities/comment-vote.entity';
+import { SavedComment } from './entities/saved-comment.entity';
 import { Comment } from './entities/comment.entity';
 
 export type CommentAuthorResponse = {
@@ -34,6 +35,7 @@ export type CommentResponse = {
   upvoteCount: number;
   downvoteCount: number;
   userVote: number | null;
+  userSaved: boolean;
   replies?: CommentResponse[];
   createdAt: Date;
   updatedAt: Date;
@@ -51,6 +53,8 @@ export class CommentsService {
     private readonly commentsRepository: Repository<Comment>,
     @InjectRepository(CommentVote)
     private readonly commentVotesRepository: Repository<CommentVote>,
+    @InjectRepository(SavedComment)
+    private readonly savedCommentsRepository: Repository<SavedComment>,
     @InjectRepository(User)
     private readonly usersRepository: Repository<User>,
     @InjectRepository(Post)
@@ -85,6 +89,7 @@ export class CommentsService {
 
     const [comments, total] = await qb.getManyAndCount();
     await this.applyRequesterVotes(comments, requester);
+    await this.applyRequesterSavedComments(comments, requester);
 
     return {
       data: comments.map((comment) => this.toCommentResponse(comment, true)),
@@ -143,6 +148,70 @@ export class CommentsService {
 
     const savedReply = await this.commentsRepository.save(reply);
     return this.findActiveCommentResponse(savedReply.id);
+  }
+
+  async findSaved(
+    query: GetCommentsQueryDto,
+    requester: AuthUser,
+  ): Promise<PaginatedCommentsResponse> {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 10;
+    const skip = (page - 1) * limit;
+    const sortColumn = query.sort === 'top' ? 'comment.score' : 'savedComment.createdAt';
+    const sortDirection = query.sort === 'oldest' ? 'ASC' : 'DESC';
+
+    const qb = this.commentsRepository
+      .createQueryBuilder('comment')
+      .innerJoin('comment.savedBy', 'savedComment', 'savedComment.userId = :requesterId', {
+        requesterId: requester.id,
+      })
+      .leftJoinAndSelect('comment.author', 'author')
+      .leftJoinAndSelect('comment.post', 'post')
+      .leftJoinAndSelect('post.author', 'postAuthor')
+      .where('post.published = true')
+      .orderBy(sortColumn, sortDirection)
+      .addOrderBy('comment.id', 'DESC')
+      .skip(skip)
+      .take(limit);
+
+    const [comments, total] = await qb.getManyAndCount();
+    await this.applyRequesterVotes(comments, requester);
+    comments.forEach((comment) => {
+      comment.userSaved = true;
+    });
+
+    return {
+      data: comments.map((comment) => this.toCommentResponse(comment)),
+      meta: new PaginationMetaDto(page, limit, total),
+    };
+  }
+
+  async saveComment(id: number, requester: AuthUser): Promise<CommentResponse> {
+    const comment = await this.findVisibleComment(id);
+    const existingSavedComment = await this.savedCommentsRepository.findOne({
+      where: { comment: { id }, user: { id: requester.id } },
+    });
+
+    if (!existingSavedComment) {
+      await this.savedCommentsRepository.save(
+        this.savedCommentsRepository.create({
+          comment: { id },
+          user: { id: requester.id },
+        }),
+      );
+    }
+
+    await this.applyRequesterVotes([comment], requester);
+    comment.userSaved = true;
+    return this.toCommentResponse(comment);
+  }
+
+  async unsaveComment(id: number, requester: AuthUser): Promise<CommentResponse> {
+    const comment = await this.findVisibleComment(id);
+    await this.savedCommentsRepository.delete({ comment: { id }, user: { id: requester.id } });
+    await this.applyRequesterVotes([comment], requester);
+    comment.userSaved = false;
+    return this.toCommentResponse(comment);
   }
 
   async update(
@@ -269,6 +338,23 @@ export class CommentsService {
     return isAdmin || isCommentAuthor || isPostAuthor;
   }
 
+  private async findVisibleComment(id: number): Promise<Comment> {
+    const comment = await this.commentsRepository.findOne({
+      where: { id },
+      relations: { author: true, post: true },
+    });
+
+    if (!comment) {
+      throw new NotFoundException(`Comment with id ${id} not found.`);
+    }
+
+    if (!comment.post.published) {
+      throw new ForbiddenException('You can only save comments under published posts.');
+    }
+
+    return comment;
+  }
+
   private async findCommentablePost(postId: number): Promise<Post> {
     const post = await this.postsRepository.findOne({
       where: { id: postId },
@@ -330,6 +416,37 @@ export class CommentsService {
     });
   }
 
+  private async applyRequesterSavedComments(
+    comments: Comment[],
+    requester?: AuthUser | null,
+  ): Promise<void> {
+    const allComments = comments.flatMap((comment) => [comment, ...(comment.replies ?? [])]);
+
+    if (!allComments.length) {
+      return;
+    }
+
+    if (!requester) {
+      allComments.forEach((comment) => {
+        comment.userSaved = false;
+      });
+      return;
+    }
+
+    const savedComments = await this.savedCommentsRepository.find({
+      where: {
+        comment: { id: In(allComments.map((comment) => comment.id)) },
+        user: { id: requester.id },
+      },
+      relations: { comment: true },
+    });
+    const savedCommentIds = new Set(savedComments.map((savedComment) => savedComment.comment.id));
+
+    allComments.forEach((comment) => {
+      comment.userSaved = savedCommentIds.has(comment.id);
+    });
+  }
+
   private calculateVoteDelta(
     oldValue: number | undefined,
     newValue: VoteValue,
@@ -355,6 +472,7 @@ export class CommentsService {
       upvoteCount: comment.upvoteCount,
       downvoteCount: comment.downvoteCount,
       userVote: comment.userVote ?? null,
+      userSaved: comment.userSaved ?? false,
       createdAt: comment.createdAt,
       updatedAt: comment.updatedAt,
     };

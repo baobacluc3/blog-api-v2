@@ -51,6 +51,14 @@ export class CommentsController {
     return this.commentsService.create(postId, createCommentDto, user);
   }
 
+  @Get('comments/saved')
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard)
+  @ApiOkResponse({ description: 'List comments saved by the authenticated user.' })
+  findSaved(@Query() query: GetCommentsQueryDto, @CurrentUser() user: AuthUser) {
+    return this.commentsService.findSaved(query, user);
+  }
+
   @Post('comments/:commentId/replies')
   @ApiBearerAuth('JWT-auth')
   @UseGuards(JwtAuthGuard)
@@ -61,6 +69,22 @@ export class CommentsController {
     @CurrentUser() user: AuthUser,
   ) {
     return this.commentsService.reply(commentId, user, createCommentDto);
+  }
+
+  @Post('comments/:id/save')
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard)
+  @ApiOkResponse({ description: 'Save a comment for the authenticated user.' })
+  save(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: AuthUser) {
+    return this.commentsService.saveComment(id, user);
+  }
+
+  @Delete('comments/:id/save')
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard)
+  @ApiOkResponse({ description: 'Remove a comment from the authenticated user saved list.' })
+  unsave(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: AuthUser) {
+    return this.commentsService.unsaveComment(id, user);
   }
 
   @Post('comments/:id/vote')

@@ -6,10 +6,12 @@ import { DataSource } from 'typeorm';
 import { CommunityMembership } from '../communities/entities/community-membership.entity';
 import { Community } from '../communities/entities/community.entity';
 import { CommentVote } from '../comments/entities/comment-vote.entity';
+import { SavedComment } from '../comments/entities/saved-comment.entity';
 import { Comment } from '../comments/entities/comment.entity';
 import { Role } from '../common/enums/role.enum';
 import { slugify } from '../common/utils/slugify';
 import { PostVote } from '../posts/entities/post-vote.entity';
+import { SavedPost } from '../posts/entities/saved-post.entity';
 import { Post } from '../posts/entities/post.entity';
 import { User } from '../users/entities/user.entity';
 
@@ -29,10 +31,12 @@ const dataSource = new DataSource({
     User,
     Post,
     PostVote,
+    SavedPost,
     Community,
     CommunityMembership,
     Comment,
     CommentVote,
+    SavedComment,
     RefreshToken,
   ],
   synchronize: process.env.NODE_ENV !== 'production',

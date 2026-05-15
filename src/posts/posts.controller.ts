@@ -50,6 +50,14 @@ export class PostsController {
     return this.postsService.findMine(query, user);
   }
 
+  @Get('saved')
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard)
+  @ApiOkResponse({ description: 'List posts saved by the authenticated user.' })
+  findSaved(@Query() query: PostsQueryDto, @CurrentUser() user: AuthUser) {
+    return this.postsService.findSaved(query, user);
+  }
+
   @Get('popular')
   @ApiOkResponse({ description: 'List most viewed published posts.' })
   findPopular(@Query('limit', new DefaultValuePipe(5), ParseIntPipe) limit: number) {
@@ -88,6 +96,22 @@ export class PostsController {
     @CurrentUser() user: AuthUser,
   ) {
     return this.postsService.update(id, updatePostDto, user);
+  }
+
+  @HttpPost(':id/save')
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard)
+  @ApiOkResponse({ description: 'Save a post for the authenticated user.' })
+  save(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: AuthUser) {
+    return this.postsService.savePost(id, user);
+  }
+
+  @Delete(':id/save')
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard)
+  @ApiOkResponse({ description: 'Remove a post from the authenticated user saved list.' })
+  unsave(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: AuthUser) {
+    return this.postsService.unsavePost(id, user);
   }
 
   @HttpPost(':id/vote')
