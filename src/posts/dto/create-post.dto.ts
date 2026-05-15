@@ -1,6 +1,32 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
-import { IsBoolean, IsInt, IsOptional, IsString, MaxLength, Min, MinLength } from 'class-validator';
+import {
+  ArrayMaxSize,
+  IsArray,
+  IsBoolean,
+  IsInt,
+  IsOptional,
+  IsString,
+  IsUrl,
+  MaxLength,
+  Min,
+  MinLength,
+} from 'class-validator';
+
+const transformStringArray = ({ value }: { value: unknown }): unknown => {
+  if (Array.isArray(value)) {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    return value
+      .split(',')
+      .map((tag) => tag.trim())
+      .filter(Boolean);
+  }
+
+  return value;
+};
 
 export class CreatePostDto {
   @ApiProperty({ example: 'Building REST APIs with NestJS' })
@@ -22,9 +48,18 @@ export class CreatePostDto {
 
   @ApiPropertyOptional({ example: 'https://example.com/cover.jpg' })
   @IsOptional()
-  @IsString()
+  @IsUrl({ require_protocol: true })
   @MaxLength(500)
   coverImage?: string;
+
+  @ApiPropertyOptional({ example: ['nestjs', 'backend'], type: [String] })
+  @IsOptional()
+  @Transform(transformStringArray)
+  @IsArray()
+  @ArrayMaxSize(10)
+  @IsString({ each: true })
+  @MaxLength(30, { each: true })
+  tags?: string[];
 
   @ApiPropertyOptional({ example: false, default: false })
   @IsOptional()
