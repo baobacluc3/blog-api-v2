@@ -12,6 +12,7 @@ import { Comment } from '../../comments/entities/comment.entity';
 import { SavedComment } from '../../comments/entities/saved-comment.entity';
 import { CommunityMembership } from '../../communities/entities/community-membership.entity';
 import { Role } from '../../common/enums/role.enum';
+import { CommunityMember } from '../../communities/entities/community-member.entity';
 import { Post } from '../../posts/entities/post.entity';
 import { SavedPost } from '../../posts/entities/saved-post.entity';
 
@@ -41,6 +42,9 @@ export class User {
 
   @OneToMany(() => Post, (post) => post.author)
   posts: Post[];
+
+  @OneToMany(() => CommunityMember, (membership) => membership.user)
+  communityMemberships: CommunityMember[];
 
   @OneToMany(() => Comment, (comment) => comment.author)
   comments: Comment[];

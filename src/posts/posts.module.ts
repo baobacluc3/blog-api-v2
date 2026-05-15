@@ -8,6 +8,7 @@ import { PostVote } from './entities/post-vote.entity';
 import { SavedPost } from './entities/saved-post.entity';
 import { Post } from './entities/post.entity';
 import { CommunityPostsController } from './community-posts.controller';
+import { FeedController } from './feed.controller';
 import { PostsController } from './posts.controller';
 import { PostsService } from './posts.service';
 

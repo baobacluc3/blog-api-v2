@@ -3,7 +3,7 @@ import * as bcrypt from 'bcrypt';
 import * as dotenv from 'dotenv';
 import { RefreshToken } from '../auth/entities/refresh-token.entity';
 import { DataSource } from 'typeorm';
-import { CommunityMembership } from '../communities/entities/community-membership.entity';
+import { CommunityMember } from '../communities/entities/community-member.entity';
 import { Community } from '../communities/entities/community.entity';
 import { CommentVote } from '../comments/entities/comment-vote.entity';
 import { SavedComment } from '../comments/entities/saved-comment.entity';

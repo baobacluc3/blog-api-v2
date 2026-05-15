@@ -7,11 +7,12 @@ import {
   getCachePatterns,
   getCacheTtlSeconds,
 } from '../cache/redis-cache.constants';
+import { AuthUser } from '../common/interfaces/auth-user.interface';
 import { slugify } from '../common/utils/slugify';
 import { AuthUser } from '../common/interfaces/auth-user.interface';
 import { CreateCommunityDto } from './dto/create-community.dto';
 import { UpdateCommunityDto } from './dto/update-community.dto';
-import { CommunityMembership } from './entities/community-membership.entity';
+import { CommunityMember } from './entities/community-member.entity';
 import { Community } from './entities/community.entity';
 
 @Injectable()
@@ -19,8 +20,8 @@ export class CommunitiesService {
   constructor(
     @InjectRepository(Community)
     private readonly communitiesRepository: Repository<Community>,
-    @InjectRepository(CommunityMembership)
-    private readonly membershipsRepository: Repository<CommunityMembership>,
+    @InjectRepository(CommunityMember)
+    private readonly communityMembersRepository: Repository<CommunityMember>,
     private readonly cacheService: CacheService,
   ) {}
 
@@ -131,6 +132,56 @@ export class CommunitiesService {
     }
 
     return community;
+  }
+
+  async join(id: number, requester: AuthUser): Promise<Community> {
+    const community = await this.findById(id);
+    const existingMembership = await this.communityMembersRepository.findOne({
+      where: { user: { id: requester.id }, community: { id: community.id } },
+    });
+
+    if (existingMembership) {
+      return community;
+    }
+
+    await this.communityMembersRepository.save(
+      this.communityMembersRepository.create({
+        user: { id: requester.id },
+        community: { id: community.id },
+      }),
+    );
+    await this.communitiesRepository.increment({ id: community.id }, 'memberCount', 1);
+    await this.invalidateCommunityListCache();
+
+    community.memberCount += 1;
+    return community;
+  }
+
+  async leave(id: number, requester: AuthUser): Promise<Community> {
+    const community = await this.findById(id);
+    const existingMembership = await this.communityMembersRepository.findOne({
+      where: { user: { id: requester.id }, community: { id: community.id } },
+    });
+
+    if (!existingMembership) {
+      return community;
+    }
+
+    await this.communityMembersRepository.delete({ id: existingMembership.id });
+    await this.communitiesRepository.decrement({ id: community.id }, 'memberCount', 1);
+    await this.invalidateCommunityListCache();
+
+    community.memberCount = Math.max(0, community.memberCount - 1);
+    return community;
+  }
+
+  async findJoinedCommunityIds(userId: number): Promise<number[]> {
+    const memberships = await this.communityMembersRepository.find({
+      where: { user: { id: userId } },
+      relations: { community: true },
+    });
+
+    return memberships.map((membership) => membership.community.id);
   }
 
   async update(id: number, updateCommunityDto: UpdateCommunityDto): Promise<Community> {
