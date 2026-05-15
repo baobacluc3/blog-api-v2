@@ -1,0 +1,18 @@
+import { TypeOrmModuleOptions } from '@nestjs/typeorm';
+import { RefreshToken } from '../auth/entities/refresh-token.entity';
+import { Category } from '../categories/entities/category.entity';
+import { Comment } from '../comments/entities/comment.entity';
+import { Post } from '../posts/entities/post.entity';
+import { User } from '../users/entities/user.entity';
+
+export const databaseConfig = (): TypeOrmModuleOptions => ({
+  type: 'postgres',
+  host: process.env.DB_HOST,
+  port: Number(process.env.DB_PORT) || 5432,
+  username: process.env.DB_USERNAME,
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_NAME,
+  entities: [User, Post, Category, Comment, RefreshToken],
+  synchronize: process.env.NODE_ENV !== 'production',
+  logging: process.env.NODE_ENV !== 'production' ? ['error', 'warn'] : ['error'],
+});
