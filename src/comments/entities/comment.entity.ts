@@ -12,6 +12,7 @@ import {
 import { Post } from '../../posts/entities/post.entity';
 import { User } from '../../users/entities/user.entity';
 import { CommentVote } from './comment-vote.entity';
+import { SavedComment } from './saved-comment.entity';
 
 @Entity('comments')
 export class Comment {
@@ -43,6 +44,9 @@ export class Comment {
   @OneToMany(() => CommentVote, (vote) => vote.comment)
   votes!: CommentVote[];
 
+  @OneToMany(() => SavedComment, (savedComment) => savedComment.comment)
+  savedBy!: SavedComment[];
+
   @Column({ type: 'int', default: 0 })
   score!: number;
 
@@ -59,6 +63,8 @@ export class Comment {
   updatedAt!: Date;
 
   userVote?: number | null;
+
+  userSaved?: boolean;
 
   @DeleteDateColumn({ nullable: true })
   deletedAt!: Date | null;

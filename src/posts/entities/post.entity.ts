@@ -12,6 +12,7 @@ import {
 import { Community } from '../../communities/entities/community.entity';
 import { Comment } from '../../comments/entities/comment.entity';
 import { PostVote } from './post-vote.entity';
+import { SavedPost } from './saved-post.entity';
 import { User } from '../../users/entities/user.entity';
 
 @Entity('posts')
@@ -85,9 +86,14 @@ export class Post {
   @OneToMany(() => PostVote, (vote) => vote.post)
   votes: PostVote[];
 
+  @OneToMany(() => SavedPost, (savedPost) => savedPost.post)
+  savedBy: SavedPost[];
+
   commentCount?: number;
 
   userVote?: number | null;
+
+  userSaved?: boolean;
 
   @CreateDateColumn()
   createdAt: Date;

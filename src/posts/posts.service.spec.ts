@@ -12,6 +12,7 @@ import { AuthUser } from '../common/interfaces/auth-user.interface';
 import { User } from '../users/entities/user.entity';
 import { PostSortBy } from './dto/post-sort-by.enum';
 import { PostVote } from './entities/post-vote.entity';
+import { SavedPost } from './entities/saved-post.entity';
 import { Post } from './entities/post.entity';
 import { PostsService } from './posts.service';
 
@@ -37,6 +38,7 @@ const createMockRepository = <T extends object>(): MockRepository<T> => ({
 
 const createQueryBuilderMock = () => ({
   leftJoinAndSelect: jest.fn().mockReturnThis(),
+  innerJoin: jest.fn().mockReturnThis(),
   loadRelationCountAndMap: jest.fn().mockReturnThis(),
   andWhere: jest.fn().mockReturnThis(),
   orderBy: jest.fn().mockReturnThis(),
@@ -50,16 +52,17 @@ describe('PostsService', () => {
   let service: PostsService;
   let postsRepository: MockRepository<Post>;
   let postVotesRepository: MockRepository<PostVote>;
-  let communitiesService: {
-    findById: jest.Mock;
-    findBySlug: jest.Mock;
-    findJoinedCommunityIds: jest.Mock;
-  };
+  let savedPostsRepository: MockRepository<SavedPost>;
+  let usersRepository: MockRepository<User>;
+  let communityMembershipsRepository: MockRepository<CommunityMembership>;
+  let communitiesService: { findById: jest.Mock; findBySlug: jest.Mock };
   let cacheService: { getOrSet: jest.Mock; invalidatePatterns: jest.Mock; createKey: jest.Mock };
 
   beforeEach(async () => {
     postsRepository = createMockRepository<Post>();
     postVotesRepository = createMockRepository<PostVote>();
+    savedPostsRepository = createMockRepository<SavedPost>();
+    usersRepository = createMockRepository<User>();
     communityMembershipsRepository = createMockRepository<CommunityMembership>();
     communitiesService = {
       findById: jest.fn().mockResolvedValue(communityEntity),
@@ -79,6 +82,8 @@ describe('PostsService', () => {
         PostsService,
         { provide: getRepositoryToken(Post), useValue: postsRepository },
         { provide: getRepositoryToken(PostVote), useValue: postVotesRepository },
+        { provide: getRepositoryToken(SavedPost), useValue: savedPostsRepository },
+        { provide: getRepositoryToken(User), useValue: usersRepository },
         {
           provide: getRepositoryToken(CommunityMembership),
           useValue: communityMembershipsRepository,
