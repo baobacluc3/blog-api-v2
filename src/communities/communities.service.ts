@@ -92,7 +92,7 @@ export class CommunitiesService {
     return community;
   }
 
-  async join(id: number, requester: AuthUser): Promise<Community> {
+  async join(id: number, requester: AuthUser): Promise<Community & { isMember?: boolean }> {
     const community = await this.findById(id);
     const existingMembership = await this.communityMembershipsRepository.findOne({
       where: { user: { id: requester.id }, community: { id: community.id } },
@@ -106,6 +106,7 @@ export class CommunitiesService {
       this.communityMembershipsRepository.create({
         user: { id: requester.id },
         community: { id: community.id },
+        user: { id: requester.id },
       }),
     );
     await this.communitiesRepository.increment({ id: community.id }, 'memberCount', 1);
@@ -115,7 +116,7 @@ export class CommunitiesService {
     return { ...community, isMember: true };
   }
 
-  async leave(id: number, requester: AuthUser): Promise<Community> {
+  async leave(id: number, requester: AuthUser): Promise<Community & { isMember?: boolean }> {
     const community = await this.findById(id);
     const existingMembership = await this.communityMembershipsRepository.findOne({
       where: { user: { id: requester.id }, community: { id: community.id } },

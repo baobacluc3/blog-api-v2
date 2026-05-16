@@ -18,6 +18,7 @@ import { OptionalJwtAuthGuard } from '../common/guards/optional-jwt-auth.guard';
 import { AuthUser } from '../common/interfaces/auth-user.interface';
 import { CommentsService } from './comments.service';
 import { CreateCommentDto } from './dto/create-comment.dto';
+import { DeleteCommentDto } from './dto/delete-comment.dto';
 import { GetCommentsQueryDto } from './dto/get-comments-query.dto';
 import { UpdateCommentDto } from './dto/update-comment.dto';
 
@@ -28,7 +29,10 @@ export class CommentsController {
 
   @Get('posts/:postId/comments')
   @UseGuards(OptionalJwtAuthGuard)
-  @ApiOkResponse({ description: 'List comments for a post with pagination and one-level replies.' })
+  @ApiOkResponse({
+    description:
+      'List paginated root comments for a post with nested Reddit-style replies. Deleted comments with replies may appear as placeholders.',
+  })
   findByPost(
     @Param('postId', ParseIntPipe) postId: number,
     @Query() query: GetCommentsQueryDto,
@@ -62,7 +66,10 @@ export class CommentsController {
   @Post('comments/:commentId/replies')
   @ApiBearerAuth('JWT-auth')
   @UseGuards(JwtAuthGuard)
-  @ApiCreatedResponse({ description: 'Reply to a root comment. Authenticated users only.' })
+  @ApiCreatedResponse({
+    description:
+      'Reply to any visible comment up to the maximum nested thread depth. Authenticated users only.',
+  })
   reply(
     @Param('commentId', ParseIntPipe) commentId: number,
     @Body() createCommentDto: CreateCommentDto,
@@ -90,7 +97,7 @@ export class CommentsController {
   @Post('comments/:id/vote')
   @ApiBearerAuth('JWT-auth')
   @UseGuards(JwtAuthGuard)
-  @ApiOkResponse({ description: 'Upvote or downvote a Reddit-style comment.' })
+  @ApiOkResponse({ description: 'Upvote or downvote a visible Reddit-style comment.' })
   vote(
     @Param('id', ParseIntPipe) id: number,
     @Body() voteDto: VoteDto,
@@ -110,7 +117,7 @@ export class CommentsController {
   @Patch('comments/:id')
   @ApiBearerAuth('JWT-auth')
   @UseGuards(JwtAuthGuard)
-  @ApiOkResponse({ description: 'Update a comment. Comment author only.' })
+  @ApiOkResponse({ description: 'Update a visible comment. Comment author only.' })
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body() updateCommentDto: UpdateCommentDto,
@@ -123,10 +130,15 @@ export class CommentsController {
   @ApiBearerAuth('JWT-auth')
   @UseGuards(JwtAuthGuard)
   @ApiOkResponse({
-    description: 'Soft delete a comment. Comment author, post author, or admin only.',
+    description:
+      'Soft delete a comment as a Reddit-style placeholder. Comment author, post author, or admin only.',
   })
-  async remove(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: AuthUser) {
-    await this.commentsService.remove(id, user);
+  async remove(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() deleteCommentDto: DeleteCommentDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    await this.commentsService.remove(id, user, deleteCommentDto);
     return { message: 'Comment deleted successfully.' };
   }
 }

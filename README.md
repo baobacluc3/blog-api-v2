@@ -24,7 +24,10 @@ This project is designed to show more than basic CRUD:
 - Public read routes for published Reddit-style posts and communities/subreddits
 - Protected post, comment, user, and community mutation routes
 - Author/admin authorization for post updates and deletes
-- Comment author/admin authorization for comment deletes
+- Comment author/post-author/admin authorization for Reddit-style soft-deleted comment placeholders
+- Nested Reddit-style comment threads with paginated root comments and recursive replies
+- Comment sorting by newest, oldest, top, best, and controversial
+- Safe public comment author responses that omit email addresses
 - Redis-cached public feeds, community/subreddit list, and popular posts
 - Reddit-style post pagination, search, community/subreddit, author, tag filters, and new/top/hot sorting
 - Upvote/downvote/clear-vote endpoints for posts and comments with score, upvote count, downvote count, current `userVote` tracking, and author `postKarma`/`commentKarma` updates
