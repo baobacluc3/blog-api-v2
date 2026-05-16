@@ -38,6 +38,15 @@ export class User {
   @Column({ unique: true, length: 180 })
   email: string;
 
+  @Column({ unique: true, length: 40, nullable: true })
+  username: string | null;
+
+  @Column({ length: 120, nullable: true })
+  displayName: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  avatarUrl: string | null;
+
   @Exclude()
   @Column({ select: false })
   password: string;
@@ -83,6 +92,18 @@ export class User {
 
   @Column({ type: 'int', default: 0 })
   commentKarma: number;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  emailVerifiedAt: Date | null;
+
+  @Column({ type: 'boolean', default: false })
+  isSuspended: boolean;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  lastSeenAt: Date | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  deletedAt: Date | null;
 
   @OneToMany(() => Post, (post) => post.author)
   posts: Post[];

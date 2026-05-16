@@ -39,6 +39,24 @@ export class CreateUserDto {
   @MaxLength(180)
   email: string;
 
+  @ApiPropertyOptional({ example: 'jane_doe' })
+  @IsOptional()
+  @IsString()
+  @MinLength(3)
+  @MaxLength(40)
+  username?: string;
+
+  @ApiPropertyOptional({ example: 'Jane' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  displayName?: string;
+
+  @ApiPropertyOptional({ example: 'https://example.com/avatar.png' })
+  @IsOptional()
+  @IsString()
+  avatarUrl?: string;
+
   @ApiProperty({ example: 'StrongPassword123!' })
   @IsString()
   @MinLength(8)

@@ -172,21 +172,44 @@ export class UsersService {
   }
 
   async findByEmail(email: string): Promise<User | null> {
-    return this.usersRepository.findOne({ where: { email } });
+    return this.usersRepository.findOne({ where: { email: email.toLowerCase() } });
+  }
+
+  async findByUsername(username: string): Promise<User | null> {
+    return this.usersRepository.findOne({ where: { username } });
   }
 
   async findByEmailWithPassword(email: string): Promise<User | null> {
-    return this.usersRepository
-      .createQueryBuilder('user')
-      .withDeleted()
-      .addSelect('user.password')
-      .where('user.email = :email', { email })
-      .getOne();
+    return this.usersRepository.findOne({
+      where: { email: email.toLowerCase() },
+      select: [
+        'id',
+        'name',
+        'email',
+        'username',
+        'displayName',
+        'avatarUrl',
+        'password',
+        'role',
+        'postKarma',
+        'commentKarma',
+        'emailVerifiedAt',
+        'isSuspended',
+        'lastSeenAt',
+        'deletedAt',
+        'createdAt',
+        'updatedAt',
+      ],
+    });
   }
 
   async update(id: number, updateUserDto: UpdateAdminUserDto): Promise<AdminUserResponseDto> {
     const user = await this.findOne(id);
     await this.applyProfileUpdates(user, updateUserDto);
+
+    if (updateUserDto.email) {
+      updateUserDto.email = updateUserDto.email.toLowerCase();
+    }
 
     if (updateUserDto.email && updateUserDto.email !== user.email) {
       await this.assertEmailAvailable(updateUserDto.email, id);

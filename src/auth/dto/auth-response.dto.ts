@@ -1,7 +1,7 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Role } from '../../common/enums/role.enum';
 
-class AuthUserResponseDto {
+export class AuthUserResponseDto {
   @ApiProperty({ example: 1 })
   id: number;
 
@@ -17,44 +17,58 @@ class AuthUserResponseDto {
   @ApiProperty({ example: 'jane@example.com' })
   email: string;
 
+  @ApiPropertyOptional({ example: 'jane_doe' })
+  username?: string;
+
+  @ApiPropertyOptional({ example: 'Jane' })
+  displayName?: string;
+
+  @ApiPropertyOptional({ example: 'https://example.com/avatar.png' })
+  avatarUrl?: string;
+
   @ApiProperty({ enum: Role, example: Role.User })
   role: Role;
 
-  @ApiProperty({ example: 'https://cdn.example.com/avatars/snoo.png', nullable: true })
-  avatarUrl: string | null;
+  @ApiProperty({ example: 0 })
+  postKarma: number;
 
-  @ApiProperty({ example: 'https://cdn.example.com/banners/snoo.png', nullable: true })
-  bannerUrl: string | null;
-
-  @ApiProperty({ example: 'I build APIs and collect oddly specific subreddits.', nullable: true })
-  bio: string | null;
-
-  @ApiProperty({ example: false })
-  profileOver18: boolean;
+  @ApiProperty({ example: 0 })
+  commentKarma: number;
 
   @ApiProperty({ example: false })
   emailVerified: boolean;
 
-  @ApiProperty({ example: 42 })
-  postKarma: number;
-
-  @ApiProperty({ example: 13 })
-  commentKarma: number;
-
   @ApiProperty()
   createdAt: Date;
-
-  @ApiProperty()
-  updatedAt: Date;
 }
 
 export class AuthResponseDto {
   @ApiProperty({ type: AuthUserResponseDto })
   user: AuthUserResponseDto;
 
-  @ApiProperty({ example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...' })
-  accessToken: string;
+  @ApiPropertyOptional({ example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...' })
+  accessToken?: string;
 
-  @ApiProperty({ example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...' })
-  refreshToken: string;
+  @ApiPropertyOptional({ example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...' })
+  refreshToken?: string;
+
+  @ApiProperty({ example: 'Bearer' })
+  tokenType: 'Bearer';
+
+  @ApiPropertyOptional({ example: 900 })
+  expiresIn?: number;
+
+  @ApiProperty({ example: false })
+  emailVerified: boolean;
+
+  @ApiPropertyOptional({ example: false })
+  requiresTwoFactor?: boolean;
+
+  @ApiPropertyOptional({ description: 'Development/test helper only; omitted in production.' })
+  devVerificationToken?: string;
+
+  @ApiPropertyOptional({
+    description: 'Temporary token returned only when 2FA verification is required.',
+  })
+  twoFactorToken?: string;
 }

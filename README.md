@@ -14,11 +14,10 @@ This project is designed to show more than basic CRUD:
 
 ## Features
 
-- User registration and login
+- Production-style auth: registration, login, refresh, logout, logout-all, email verification, password reset, password change, sessions/devices, security events, and optional TOTP 2FA
 - JWT access tokens
-- Refresh tokens with token rotation
-- Refresh token hashing in PostgreSQL
-- Logout with refresh token revocation
+- Refresh tokens with token rotation, bcrypt hashing in PostgreSQL, reuse/mismatch detection, and session metadata
+- Single-use hashed email verification and password reset tokens
 - Password hashing with bcrypt
 - `admin` and `user` roles
 - Public read routes for published Reddit-style posts and communities/subreddits
@@ -51,6 +50,9 @@ src/
   auth/
     dto/
     entities/
+    guards/
+    mail/
+    mappers/
     strategies/
     auth.controller.ts
     auth.module.ts
@@ -135,6 +137,17 @@ JWT_SECRET=replace-with-a-long-random-secret
 JWT_EXPIRES_IN=15m
 JWT_REFRESH_SECRET=replace-with-a-different-long-random-refresh-secret
 JWT_REFRESH_EXPIRES_IN=7d
+APP_URL=http://localhost:3000/api
+EMAIL_VERIFICATION_EXPIRES_IN=24h
+PASSWORD_RESET_EXPIRES_IN=1h
+TWO_FACTOR_ISSUER=Reddit Clone API
+
+# Optional SMTP provider settings; development logs auth links instead.
+MAIL_HOST=
+MAIL_PORT=
+MAIL_USER=
+MAIL_PASSWORD=
+MAIL_FROM=
 
 THROTTLE_TTL=60000
 THROTTLE_LIMIT=100
@@ -209,6 +222,26 @@ Health check:
 curl http://localhost:3000/api/health
 ```
 
+
+## Authentication
+
+The auth module is designed as a production-style authentication boundary rather than a minimal register/login sample:
+
+- **JWT access tokens** are short-lived and signed with `JWT_SECRET` / `JWT_EXPIRES_IN`.
+- **Refresh tokens** are JWTs with `tokenType: 'refresh'`, a `jti`, and the user id/email/role in the payload. Only bcrypt hashes are stored in PostgreSQL.
+- **Refresh-token rotation** revokes the old token on every refresh, stores `replacedByTokenId`, and issues a new refresh token for the same session/device.
+- **Reuse and mismatch detection** revokes all active refresh tokens for the user and records security events such as `REFRESH_TOKEN_REUSE_DETECTED` or `REFRESH_TOKEN_MISMATCH`.
+- **Logout** revokes the submitted refresh token and its session. **Logout all** revokes every active refresh token and session for the current user.
+- **Email verification** uses random single-use tokens stored only as hashes. Registration still returns an auth response immediately with `emailVerified: false`, and development/test responses may include `devVerificationToken`; production responses never do.
+- **Forgot/reset password** responses are generic so account existence is not leaked. Reset tokens are single-use, hashed, expire according to `PASSWORD_RESET_EXPIRES_IN`, and revoke all sessions after a successful reset.
+- **Change password** requires a valid access token, verifies the current password, updates the bcrypt hash, records `PASSWORD_CHANGED`, and requires re-login by revoking active sessions.
+- **Session/device management** stores user agent, IP address, device name, `lastUsedAt`, and revocation state. Users can list and revoke only their own sessions.
+- **Security events** are recorded for registration, email verification, login success/failure, logout, password reset/change, refresh rotation/reuse/mismatch, session revocation, and 2FA changes. Users can fetch their recent events at `GET /api/auth/security-events`.
+- **Optional TOTP 2FA** is available with setup/enable/disable/verify endpoints. Secrets are encrypted at rest using a key derived from `TWO_FACTOR_ENCRYPTION_SECRET` when provided, otherwise `JWT_SECRET`; raw secrets are returned only outside production.
+- **Rate limiting hooks** use `@nestjs/throttler` on sensitive endpoints such as register, login, forgot password, resend verification, refresh, and 2FA verify, in addition to the global throttler configuration.
+
+Sensitive fields such as passwords, refresh token hashes, verification token hashes, reset token hashes, and encrypted 2FA secrets are never returned by auth responses.
+
 ## Reddit-style endpoints
 
 Authenticated users create Reddit-style text or link submissions inside a community/subreddit with `POST /api/communities/:communityId/posts` or the Reddit-like `POST /api/r/:communitySlug/posts`. The legacy `POST /api/posts` route still accepts `communityId` for clients that prefer a flat API. Include optional `url`, `flair`, and `nsfw` fields for Reddit-like link posts.
@@ -256,6 +289,11 @@ Public routes:
 - `POST /api/auth/login`
 - `POST /api/auth/refresh`
 - `POST /api/auth/logout`
+- `POST /api/auth/verify-email`
+- `POST /api/auth/resend-verification-email`
+- `POST /api/auth/forgot-password`
+- `POST /api/auth/reset-password`
+- `POST /api/auth/2fa/verify`
 - `GET /api/health`
 - `GET /api/posts`
 - `GET /api/communities/:communityId/posts` (`/api/subreddits/:communityId/posts` alias)
@@ -268,6 +306,14 @@ Public routes:
 
 Protected routes:
 
+- `POST /api/auth/change-password`
+- `GET /api/auth/sessions`
+- `DELETE /api/auth/sessions/:id`
+- `POST /api/auth/logout-all`
+- `GET /api/auth/security-events`
+- `POST /api/auth/2fa/setup`
+- `POST /api/auth/2fa/enable`
+- `POST /api/auth/2fa/disable`
 - `POST /api/posts`
 - `POST /api/communities/:communityId/posts` (`/api/subreddits/:communityId/posts` alias)
 - `POST /api/r/:communitySlug/posts`
@@ -527,9 +573,11 @@ This is useful for GitHub portfolio review because recruiters can see that the p
 - Refresh tokens are longer-lived and signed with `JWT_REFRESH_SECRET`.
 - Refresh tokens include a `jti` claim that maps to a database record.
 - Only a bcrypt hash of each refresh token is stored in PostgreSQL.
-- `POST /api/auth/refresh` validates the submitted refresh token, revokes the old token, creates a new refresh token, and returns a new access token.
-- Reusing a revoked or mismatched refresh token revokes all refresh tokens for that user as a defensive measure.
-- `POST /api/auth/logout` revokes the submitted refresh token.
+- `POST /api/auth/refresh` validates the submitted refresh token, revokes the old token, sets `replacedByTokenId`, creates a new refresh token for the same session, updates `lastUsedAt`, and returns a new access token.
+- Reusing a revoked or mismatched refresh token revokes all active refresh tokens for that user as a defensive measure and records a security event.
+- Expired refresh tokens are revoked and rejected.
+- `POST /api/auth/logout` revokes the submitted refresh token and its session.
+- `POST /api/auth/logout-all` revokes every active session and refresh token owned by the current user.
 
 ## API design notes
 
