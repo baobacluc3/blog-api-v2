@@ -4,6 +4,7 @@ import {
   DeleteDateColumn,
   Entity,
   Index,
+  JoinColumn,
   ManyToOne,
   OneToMany,
   PrimaryGeneratedColumn,
@@ -13,6 +14,13 @@ import { Post } from '../../posts/entities/post.entity';
 import { User } from '../../users/entities/user.entity';
 import { CommentVote } from './comment-vote.entity';
 import { SavedComment } from './saved-comment.entity';
+
+export enum CommentDeletedBy {
+  Author = 'author',
+  PostAuthor = 'post_author',
+  Moderator = 'moderator',
+  Admin = 'admin',
+}
 
 @Entity('comments')
 export class Comment {
@@ -31,11 +39,16 @@ export class Comment {
   author!: User;
 
   @Index()
+  @Column({ type: 'int', nullable: true })
+  parentId!: number | null;
+
+  @Index()
   @ManyToOne(() => Comment, (comment) => comment.replies, {
     eager: false,
     nullable: true,
     onDelete: 'CASCADE',
   })
+  @JoinColumn({ name: 'parentId' })
   parent!: Comment | null;
 
   @OneToMany(() => Comment, (comment) => comment.parent)
@@ -56,6 +69,14 @@ export class Comment {
   @Column({ type: 'int', default: 0 })
   downvoteCount!: number;
 
+  @Index()
+  @Column({ type: 'int', default: 0 })
+  depth!: number;
+
+  @Index()
+  @Column({ type: 'varchar', length: 500, default: '' })
+  path!: string;
+
   @CreateDateColumn()
   createdAt!: Date;
 
@@ -68,4 +89,10 @@ export class Comment {
 
   @DeleteDateColumn({ nullable: true })
   deletedAt!: Date | null;
+
+  @Column({ type: 'enum', enum: CommentDeletedBy, nullable: true })
+  deletedBy!: CommentDeletedBy | null;
+
+  @Column({ type: 'text', nullable: true })
+  deletedReason!: string | null;
 }

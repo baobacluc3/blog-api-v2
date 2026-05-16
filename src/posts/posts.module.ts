@@ -18,7 +18,7 @@ import { PostsService } from './posts.service';
     CommunitiesModule,
     RedisCacheModule,
   ],
-  controllers: [PostsController, CommunityPostsController],
+  controllers: [PostsController, CommunityPostsController, FeedController],
   providers: [PostsService],
   exports: [PostsService],
 })

@@ -18,8 +18,13 @@ export class GetCommentsQueryDto {
   @Max(50)
   limit?: number = 10;
 
-  @ApiPropertyOptional({ enum: ['newest', 'oldest', 'top'], default: 'newest' })
+  @ApiPropertyOptional({
+    enum: ['newest', 'oldest', 'top', 'best', 'controversial'],
+    default: 'newest',
+    description:
+      'Reddit-style sorting for root comments. Replies are returned in stable thread order.',
+  })
   @IsOptional()
-  @IsIn(['newest', 'oldest', 'top'])
-  sort?: 'newest' | 'oldest' | 'top' = 'newest';
+  @IsIn(['newest', 'oldest', 'top', 'best', 'controversial'])
+  sort?: 'newest' | 'oldest' | 'top' | 'best' | 'controversial' = 'newest';
 }
