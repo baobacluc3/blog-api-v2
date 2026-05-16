@@ -19,8 +19,14 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: JwtPayload): Promise<AuthUser> {
-    const user = await this.usersService.findOne(payload.sub);
-    if (!user) {
+    let user;
+    try {
+      user = await this.usersService.findOne(payload.sub);
+    } catch {
+      throw new UnauthorizedException('User no longer exists.');
+    }
+
+    if (user.isSuspended || user.deletedAt) {
       throw new UnauthorizedException('User no longer exists.');
     }
 
@@ -28,6 +34,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       id: user.id,
       email: user.email,
       role: user.role,
+      username: user.username ?? undefined,
     };
   }
 }
