@@ -55,7 +55,11 @@ describe('PostsService', () => {
   let savedPostsRepository: MockRepository<SavedPost>;
   let usersRepository: MockRepository<User>;
   let communityMembershipsRepository: MockRepository<CommunityMembership>;
-  let communitiesService: { findById: jest.Mock; findBySlug: jest.Mock };
+  let communitiesService: {
+    findById: jest.Mock;
+    findBySlug: jest.Mock;
+    findJoinedCommunityIds: jest.Mock;
+  };
   let cacheService: { getOrSet: jest.Mock; invalidatePatterns: jest.Mock; createKey: jest.Mock };
 
   beforeEach(async () => {
