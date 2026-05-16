@@ -568,3 +568,63 @@ Use these bullets in your CV, GitHub README summary, or LinkedIn project descrip
 - Implemented production-style authorization rules: admin-only management routes, author-only post edits, and comment ownership checks.
 - Added secure logout, hashed refresh token storage, token revocation, Redis caching, Redis-backed rate limiting, search, filtering, sorting, pagination metadata, unique slug generation, reading-time calculation, view counts, soft deletes, seed data, health checks, Docker, and CI.
 - Designed the project with clean feature modules, reusable guards/decorators, service-level business rules, and documented API examples.
+
+## Users and Reddit-style profiles
+
+The users module now separates public identity, authenticated self-management, and admin moderation.
+
+### Public profiles
+
+Public profiles use Reddit-like usernames and never expose private email, password, refresh tokens, or private relations:
+
+- `GET /api/u/:username` - public profile summary.
+- `GET /api/u/:username/overview` - mixed public post/comment activity.
+- `GET /api/u/:username/posts` - paginated public posts.
+- `GET /api/u/:username/comments` - paginated public comments.
+- `GET /api/u/:username/karma` - read-only post/comment/total karma.
+- `GET /api/u/:username/communities` - public joined community summaries.
+- `GET /api/u/:username/moderates` - moderation communities when moderation roles are available.
+
+Suspended users are hidden from public profile routes with a not-found response. Deleted users are soft-deleted and are not returned by normal public lookups.
+
+### Authenticated account management
+
+Authenticated users manage their own account through `/api/users/me` without touching admin-only fields like role, karma, or suspension state:
+
+- `GET /api/users/me` - private profile including email.
+- `PATCH /api/users/me` - update `name`, `username`, `displayName`, `bio`, `avatarUrl`, `bannerUrl`, `location`, and `websiteUrl`.
+- `PATCH /api/users/me/password` - change password after validating `currentPassword`.
+- `GET /api/users/me/karma` - current user's karma summary.
+- `DELETE /api/users/me` - soft-delete the account without deleting posts or comments by default.
+
+### Saved content and blocking
+
+Saved content is available as mixed or typed lists:
+
+- `GET /api/users/me/saved`
+- `GET /api/users/me/saved/posts`
+- `GET /api/users/me/saved/comments`
+
+User blocking is authenticated and idempotent:
+
+- `POST /api/users/:id/block`
+- `DELETE /api/users/:id/block`
+- `GET /api/users/me/blocked-users`
+
+### Community identity
+
+- `GET /api/users/me/communities` - communities joined by the current user, including join metadata.
+- `GET /api/users/me/moderated-communities` - communities moderated by the current user when moderator roles exist.
+
+### Admin user moderation
+
+Admin user management lives under `/api/admin/users` to avoid route conflicts with `/api/users/me`:
+
+- `GET /api/admin/users` - paginated list with `q`, `role`, and `isSuspended` filters.
+- `GET /api/admin/users/:id`
+- `PATCH /api/admin/users/:id`
+- `PATCH /api/admin/users/:id/suspend`
+- `PATCH /api/admin/users/:id/unsuspend`
+- `DELETE /api/admin/users/:id` - soft-delete.
+
+Suspended or soft-deleted users cannot log in or refresh tokens. Karma remains read-only through user APIs and is updated by vote logic.

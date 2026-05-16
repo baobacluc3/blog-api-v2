@@ -16,10 +16,10 @@ export class CommunityMember {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @ManyToOne(() => User, (user) => user.communityMemberships, { onDelete: 'CASCADE' })
+  @ManyToOne(() => User, (user) => user.communityMembers, { onDelete: 'CASCADE' })
   user: User;
 
-  @ManyToOne(() => Community, (community) => community.memberships, { onDelete: 'CASCADE' })
+  @ManyToOne(() => Community, (community) => community.communityMembers, { onDelete: 'CASCADE' })
   community: Community;
 
   @CreateDateColumn()

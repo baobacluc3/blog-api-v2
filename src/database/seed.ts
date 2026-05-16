@@ -4,6 +4,7 @@ import * as dotenv from 'dotenv';
 import { RefreshToken } from '../auth/entities/refresh-token.entity';
 import { DataSource } from 'typeorm';
 import { CommunityMember } from '../communities/entities/community-member.entity';
+import { CommunityMembership } from '../communities/entities/community-membership.entity';
 import { Community } from '../communities/entities/community.entity';
 import { CommentVote } from '../comments/entities/comment-vote.entity';
 import { SavedComment } from '../comments/entities/saved-comment.entity';
@@ -13,6 +14,7 @@ import { slugify } from '../common/utils/slugify';
 import { PostVote } from '../posts/entities/post-vote.entity';
 import { SavedPost } from '../posts/entities/saved-post.entity';
 import { Post } from '../posts/entities/post.entity';
+import { UserBlock } from '../users/entities/user-block.entity';
 import { User } from '../users/entities/user.entity';
 
 const calculateReadingTime = (content: string): number =>
@@ -29,11 +31,13 @@ const dataSource = new DataSource({
   database: process.env.DB_NAME,
   entities: [
     User,
+    UserBlock,
     Post,
     PostVote,
     SavedPost,
     Community,
     CommunityMember,
+    CommunityMembership,
     Comment,
     CommentVote,
     SavedComment,
@@ -47,6 +51,7 @@ async function ensureUser(input: {
   email: string;
   password: string;
   role: Role;
+  username?: string;
 }): Promise<User> {
   const usersRepository = dataSource.getRepository(User);
   const existing = await usersRepository.findOne({ where: { email: input.email } });
@@ -56,12 +61,29 @@ async function ensureUser(input: {
   }
 
   const password = await bcrypt.hash(input.password, 12);
+  const username = slugify(input.username ?? input.name)
+    .replace(/-/g, '_')
+    .slice(0, 30);
+
   return usersRepository.save(
     usersRepository.create({
+      username,
       name: input.name,
+      displayName: input.name,
       email: input.email,
       password,
       role: input.role,
+      avatarUrl: null,
+      bannerUrl: null,
+      bio: null,
+      profileOver18: false,
+      emailVerified: false,
+      location: null,
+      websiteUrl: null,
+      isSuspended: false,
+      suspendedAt: null,
+      suspendedReason: null,
+      lastSeenAt: null,
     }),
   );
 }
@@ -133,6 +155,7 @@ async function seed(): Promise<void> {
 
   const author = await ensureUser({
     name: 'Jane Author',
+    username: 'jane_author',
     email: 'jane@example.com',
     password: 'StrongPassword123!',
     role: Role.User,

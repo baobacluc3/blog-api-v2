@@ -60,6 +60,8 @@ export class AuthService {
       throw new UnauthorizedException('Invalid email or password.');
     }
 
+    this.usersService.assertCanLogin(user);
+
     const isPasswordValid = await bcrypt.compare(loginDto.password, user.password);
     if (!isPasswordValid) {
       throw new UnauthorizedException('Invalid email or password.');
@@ -95,6 +97,8 @@ export class AuthService {
       await this.revokeRefreshToken(storedToken);
       throw new UnauthorizedException('Refresh token expired.');
     }
+
+    this.usersService.assertCanLogin(storedToken.user);
 
     const newRefreshToken = await this.createRefreshToken(storedToken.user);
     storedToken.revokedAt = new Date();
