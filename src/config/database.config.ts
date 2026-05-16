@@ -9,6 +9,7 @@ import { Comment } from '../comments/entities/comment.entity';
 import { PostVote } from '../posts/entities/post-vote.entity';
 import { SavedPost } from '../posts/entities/saved-post.entity';
 import { Post } from '../posts/entities/post.entity';
+import { UserBlock } from '../users/entities/user-block.entity';
 import { User } from '../users/entities/user.entity';
 
 export const databaseConfig = (): TypeOrmModuleOptions => ({
@@ -20,6 +21,7 @@ export const databaseConfig = (): TypeOrmModuleOptions => ({
   database: process.env.DB_NAME,
   entities: [
     User,
+    UserBlock,
     Post,
     PostVote,
     SavedPost,

@@ -5,8 +5,14 @@ export class AuthUserResponseDto {
   @ApiProperty({ example: 1 })
   id: number;
 
+  @ApiProperty({ example: 'snoo_dev' })
+  username: string;
+
   @ApiProperty({ example: 'Jane Doe' })
   name: string;
+
+  @ApiProperty({ example: 'Snoo Dev' })
+  displayName: string;
 
   @ApiProperty({ example: 'jane@example.com' })
   email: string;

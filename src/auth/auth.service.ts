@@ -144,6 +144,8 @@ export class AuthService {
       throw new UnauthorizedException(GENERIC_LOGIN_ERROR);
     }
 
+    this.usersService.assertCanLogin(user);
+
     const isPasswordValid = await bcrypt.compare(loginDto.password, user.password);
     if (!isPasswordValid) {
       await this.recordSecurityEvent(user, AuthSecurityEventType.LoginFailed, metadata, {
