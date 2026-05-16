@@ -10,7 +10,6 @@ import {
 import { RefreshToken } from '../../auth/entities/refresh-token.entity';
 import { Comment } from '../../comments/entities/comment.entity';
 import { SavedComment } from '../../comments/entities/saved-comment.entity';
-import { CommunityMembership } from '../../communities/entities/community-membership.entity';
 import { Role } from '../../common/enums/role.enum';
 import { CommunityMember } from '../../communities/entities/community-member.entity';
 import { Post } from '../../posts/entities/post.entity';
@@ -48,9 +47,6 @@ export class User {
 
   @OneToMany(() => Comment, (comment) => comment.author)
   comments: Comment[];
-
-  @OneToMany(() => CommunityMembership, (membership) => membership.user)
-  communityMemberships: CommunityMembership[];
 
   @OneToMany(() => SavedPost, (savedPost) => savedPost.user)
   savedPosts: SavedPost[];

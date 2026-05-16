@@ -5,7 +5,7 @@ import { CacheService } from '../cache/cache.service';
 import { Role } from '../common/enums/role.enum';
 import { AuthUser } from '../common/interfaces/auth-user.interface';
 import { CommunitiesService } from './communities.service';
-import { CommunityMembership } from './entities/community-membership.entity';
+import { CommunityMember } from './entities/community-member.entity';
 import { Community } from './entities/community.entity';
 
 type MockRepository<T extends object = object> = Partial<Record<keyof Repository<T>, jest.Mock>>;
@@ -26,12 +26,12 @@ const createMockRepository = <T extends object>(): MockRepository<T> => ({
 describe('CommunitiesService memberships', () => {
   let service: CommunitiesService;
   let communitiesRepository: MockRepository<Community>;
-  let membershipsRepository: MockRepository<CommunityMembership>;
+  let membershipsRepository: MockRepository<CommunityMember>;
   let cacheService: { getOrSet: jest.Mock; invalidatePatterns: jest.Mock };
 
   beforeEach(async () => {
     communitiesRepository = createMockRepository<Community>();
-    membershipsRepository = createMockRepository<CommunityMembership>();
+    membershipsRepository = createMockRepository<CommunityMember>();
     cacheService = {
       getOrSet: jest.fn((key: string, ttl: number, factory: () => Promise<unknown>) => factory()),
       invalidatePatterns: jest.fn().mockResolvedValue(undefined),
@@ -41,7 +41,7 @@ describe('CommunitiesService memberships', () => {
       providers: [
         CommunitiesService,
         { provide: getRepositoryToken(Community), useValue: communitiesRepository },
-        { provide: getRepositoryToken(CommunityMembership), useValue: membershipsRepository },
+        { provide: getRepositoryToken(CommunityMember), useValue: membershipsRepository },
         { provide: CacheService, useValue: cacheService },
       ],
     }).compile();

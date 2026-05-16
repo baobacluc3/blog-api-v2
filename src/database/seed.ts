@@ -33,7 +33,7 @@ const dataSource = new DataSource({
     PostVote,
     SavedPost,
     Community,
-    CommunityMembership,
+    CommunityMember,
     Comment,
     CommentVote,
     SavedComment,
